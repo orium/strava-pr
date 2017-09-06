@@ -26,21 +26,46 @@ import kiambogo.scrava.models.{PersonalDetailedActivity, Streams}
 
 import scala.concurrent.duration.Duration
 
-case class DistanceDuration(distance: Int, startAt: Int, duration: Duration, run: Run)
-
-object DistanceDuration {
-  implicit object DistanceDurationIsOrdered extends Ordering[DistanceDuration] {
-    def compare(a: DistanceDuration, b: DistanceDuration): Int = a.duration compare b.duration
+class Pace private(val durationPerKm: Duration) {
+  override def toString: String = {
+    val secs = durationPerKm.toSeconds
+    f"""${secs / 60}%02d'${secs % 60}%02d"/km"""
   }
 }
 
-class Run private (val activity: PersonalDetailedActivity, timeDistance: Seq[Streams]) {
+object Pace {
+  def apply(distance: Int, duration: Duration): Pace = {
+    require(distance > 0)
+
+    new Pace(duration / (distance / 1000.0))
+  }
+}
+
+case class DistanceDuration(distance: Int, startAt: Int, duration: Duration, run: Run) {
+  def pace: Pace = Pace(distance, duration)
+}
+
+object DistanceDuration {
+  implicit object DistanceDurationIsOrdered extends Ordering[DistanceDuration] {
+    def compare(a: DistanceDuration, b: DistanceDuration): Int = {
+      // We disambiguate to that we have a deterministic order.
+      Seq(
+        a.duration compare b.duration,
+        a.run.date.compareTo(b.run.date),
+        a.startAt  compare b.startAt,
+        a.run.id   compare b.run.id
+      ).find(_ != 0).getOrElse(0)
+    }
+  }
+}
+
+class Run(
+  val id: Int,
+  val date: LocalDate,
+  val times: Array[Int],
+  val distances: Array[Int]
+) {
   import DistanceDuration.DistanceDurationIsOrdered
-
-  private val times: Array[Int] = timeDistance(0).data.map(_.asInstanceOf[Int]).toArray
-  private val distances: Array[Int] = timeDistance(1).data.map(_.asInstanceOf[Float].round).toArray
-
-  def date: LocalDate = LocalDate.parse(activity.start_date, DateTimeFormatter.ISO_ZONED_DATE_TIME)
 
   private def interpolate(d1: Int, t1: Int, d2: Int, t2: Int, d: Int): Int = {
     val m = (t1 - t2).toDouble / (d1 - d2).toDouble
@@ -81,8 +106,10 @@ class Run private (val activity: PersonalDetailedActivity, timeDistance: Seq[Str
     }
   }
 
-  def bestTimes(distance: Int): Seq[DistanceDuration] =
-    allTimesForDistance(distance).sorted
+  def bestTimes(distance: Int): Seq[DistanceDuration] = {
+    // We ignore repeated times in the same run.
+    allTimesForDistance(distance).groupBy(_.duration).values.map(_.min).toSeq.sorted
+  }
 
   def bestTime(distance: Int): Option[DistanceDuration] =
     bestTimes(distance).headOption
@@ -93,20 +120,10 @@ object Run {
     val timeDistance: Seq[Streams] = RateLimiter {
       client.retrieveActivityStream(activity.id.toString, Some("time,distance"))
     }
+    val times: Array[Int] = timeDistance(0).data.map(_.asInstanceOf[Int]).toArray
+    val distances: Array[Int] = timeDistance(1).data.map(_.asInstanceOf[Float].round).toArray
+    val date = LocalDate.parse(activity.start_date, DateTimeFormatter.ISO_ZONED_DATE_TIME)
 
-    new Run(activity, timeDistance)
-  }
-}
-
-class BestTimes private (bestTimes: Seq[DistanceDuration]) extends Traversable[DistanceDuration] {
-  override def foreach[U](f: (DistanceDuration) => U): Unit = bestTimes.foreach(f)
-}
-
-object BestTimes {
-  def fromRuns(runs: Set[Run], distance: Int, bestN: Int): BestTimes = {
-    val bestTimes: Seq[DistanceDuration] =
-      runs.flatMap(run => run.bestTimes(distance)).toSeq.sorted
-
-    new BestTimes(bestTimes.take(bestN))
+    new Run(activity.id, date, times, distances)
   }
 }

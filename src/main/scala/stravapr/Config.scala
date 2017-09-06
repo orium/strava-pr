@@ -20,12 +20,10 @@ import java.io.File
 
 import com.typesafe.config.ConfigFactory
 
+import scala.collection.JavaConverters._
 import scala.util.Try
 
-
-import scala.collection.JavaConverters._
-
-case class Config(accessToken: String, showNBest: Int, prDistances: Seq[Int])
+case class Config(accessToken: String, showNBest: Int, onlyBestOfEachRun: Boolean, prDistances: Seq[Int])
 
 object Config {
   def fromFile(configFile: File): Try[Config] = Try {
@@ -33,8 +31,9 @@ object Config {
 
     val authToken   = c.getString("auth-token")
     val showNBest   = c.getInt("show-n-best")
+    val onlyBestOfEachRun = c.getBoolean("only-best-of-each-run")
     val prDistances = c.getNumberList("pr-distances").asScala.map(_.intValue())
 
-    Config(authToken, showNBest, prDistances)
+    Config(authToken, showNBest, onlyBestOfEachRun, prDistances)
   }
 }

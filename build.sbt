@@ -15,3 +15,5 @@ lazy val stravaPRSettings = Seq(
     Dependency.TypesafeConfig
   )
 )
+
+enablePlugins(UniversalPlugin)

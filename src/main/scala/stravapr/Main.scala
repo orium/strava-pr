@@ -41,7 +41,7 @@ object RateLimiter {
 
       backoff = backoff * 2.0
 
-      println(s"Rate limite exceeded.  Sleeping for $backoff...")
+      println(s"Rate limit exceeded.  Sleeping for $backoff...")
       Thread.sleep(backoff.toMillis)
 
       apply(f)
@@ -49,19 +49,19 @@ object RateLimiter {
 }
 
 object Main {
-  private def output(distances: Seq[Int], showNBest: Int, runs: Set[Run]): Unit = {
-    def formatDuration(duration: Duration): String = {
-      val s = duration.toSeconds % 60
-      val m = duration.toSeconds / 60 % 60
-      val h = duration.toSeconds / 60 / 60
+  private def formatDuration(duration: Duration): String = {
+    val s = duration.toSeconds % 60
+    val m = duration.toSeconds / 60 % 60
+    val h = duration.toSeconds / 60 / 60
 
-      f"$h%2d h $m%2d m $s%2d s"
-    }
+    f"$h h $m%02d m $s%02d s"
+  }
 
+  private def outputPersonalRecords(personalRecords: PersonalRecords): Unit = {
     var first = true
 
-    distances foreach { distance =>
-      val bestTimes = BestTimes.fromRuns(runs, distance, showNBest)
+    personalRecords.distances foreach { distance =>
+      val bestTimes = personalRecords.bestTimes(distance)
 
       if (bestTimes.nonEmpty) {
         if (!first) {
@@ -70,15 +70,16 @@ object Main {
 
         println(s"Best $distance meters")
         println()
-        println("         time            date     start at (m)   total run dist (m)   url")
+        println("         time            date        pace        start at (m)   total run dist (m)   url")
 
         bestTimes foreach { distanceDuration: DistanceDuration =>
           val run = distanceDuration.run
           val formatedDuration = formatDuration(distanceDuration.duration)
-          val url = s"https://www.strava.com/activities/${run.activity.id}"
+          val url = s"https://www.strava.com/activities/${run.id}"
           val runDist = run.totalDistance
+          val pace = distanceDuration.pace
 
-          println(f"    $formatedDuration%14s    ${run.date}%6s        ${distanceDuration.startAt}%6d               $runDist%6d   $url")
+          println(f"    $formatedDuration%14s    ${run.date}%6s    $pace%8s          ${distanceDuration.startAt}%6d               $runDist%6d   $url")
         }
 
         first = false
@@ -86,13 +87,14 @@ object Main {
     }
   }
 
-  private val ConfigDir: File = new File(new File(Properties.userHome, ".config"), "strava-pr")
+  private val ConfigDir:  File = new File(new File(Properties.userHome, ".config"), "strava-pr")
   private val ConfigFile: File = new File(ConfigDir, "strava-pr.conf")
+  private val CacheFile:  File = new File(ConfigDir, "cache")
 
-  def isSetupDone(): Boolean =
+  private def isSetupDone(): Boolean =
     ConfigFile.exists()
 
-  def createConfigFile(): Unit = {
+  private def createConfigFile(): Unit = {
     ConfigDir.mkdirs()
     val p = new PrintWriter(ConfigFile)
     try {
@@ -100,6 +102,7 @@ object Main {
         s"""auth-token = "put a token here"
            |
            |show-n-best = 5
+           |only-best-of-each-run = true
            |
            |pr-distances = [
            |  1000,
@@ -128,6 +131,16 @@ object Main {
     }
   }
 
+  def benchmark[T](f: => T): T = {
+    val before = System.nanoTime()
+    val r = f
+    val after = System.nanoTime()
+
+    println(f"Executed in ${(after - before)/1000000.0}%.2f")
+
+    r
+  }
+
   def main(args: Array[String]): Unit = {
     if (!isSetupDone()) {
       createConfigFile()
@@ -141,16 +154,56 @@ object Main {
 
     val config: Config = Config.fromFile(ConfigFile).get
 
-    val client = new ScravaClient(config.accessToken)
+    benchmark {
+      val runCache = if (CacheFile.exists()) RunCache.fromFile(CacheFile).get else RunCache.empty
+      val client = new ScravaClient(config.accessToken)
 
-    val runs: Set[Run] = RateLimiter(client.listAthleteActivities(retrieveAll = true)).map { activitySummary =>
-      RateLimiter(client.retrieveActivity(activitySummary.id, includeEfforts = Some(true)))
-    }.collect {
-      case personalActivity: PersonalDetailedActivity => personalActivity
-    }.filter(_.`type` == "Run")
-      .map(activity => Run.fetch(client, activity))
-      .toSet
+      val runs: Set[Run] = RateLimiter(client.listAthleteActivities(retrieveAll = true)).flatMap { activitySummary =>
+        runCache.get(activitySummary.id).orElse {
+          Some(RateLimiter(client.retrieveActivity(activitySummary.id)))
+            .collect {
+              case personalActivity: PersonalDetailedActivity => personalActivity
+            }.filter(_.`type` == "Run")
+            .map(activity => Run.fetch(client, activity))
+        }
+      }
+        .toSet
 
-    output(config.prDistances, config.showNBest, runs)
+      // Populate and save cache.
+      runs.foreach(runCache.add)
+      runCache.save(CacheFile)
+
+      // WIP
+      if (false) {
+        def fromTo(start: Int, end: Int, step: Int = 1): Seq[Int] =
+          Stream.iterate(start)(_ + step).takeWhile(_ <= end)
+
+        // Start at 500 meters since it is unlikely that we have accurate GPS information for such short distances.
+        val distances = fromTo(500, 1000000, 50)
+        val personalRecords = PersonalRecords.fromRuns(runs, distances, showNBest = 1, onlyBestOfEachRun = false)
+
+        println("# distance      time       pace     pace secs     date")
+
+        distances foreach { distance =>
+          val bestTimes = personalRecords.bestTimes(distance)
+
+          if (bestTimes.nonEmpty) {
+            val bestTime = bestTimes.bestTime.get
+            val duration = formatDuration(bestTime.duration).filterNot(_.isSpaceChar)
+            val date     = bestTime.run.date
+            val pace     = bestTime.pace
+
+            println(f"$distance%10d   $duration%9s   $pace%8s  ${pace.durationPerKm.toSeconds}%10d  $date%6s")
+          }
+        }
+
+        // WIP
+        // outputFinegrainedRecords()
+      } else {
+        val personalRecords = PersonalRecords.fromRuns(runs, config.prDistances, config.showNBest, config.onlyBestOfEachRun)
+
+        outputPersonalRecords(personalRecords)
+      }
+    }
   }
 }
