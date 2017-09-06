@@ -57,6 +57,8 @@ class RunCache private (cache: MutableMap[Int, Run]) {
       p.close()
     }
   }
+
+  def size: Int = cache.size
 }
 
 object RunCache {

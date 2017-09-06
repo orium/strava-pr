@@ -26,6 +26,34 @@ import scala.util.Try
 case class Config(accessToken: String, showNBest: Int, onlyBestOfEachRun: Boolean, prDistances: Seq[Int])
 
 object Config {
+  val DefaultConfigFileContent: String =
+    s"""auth-token = "put a token here"
+       |
+       |show-n-best = 5
+       |only-best-of-each-run = true
+       |
+       |pr-distances = [
+       |  1000,
+       |  1500,
+       |  1610,
+       |  3000,
+       |  3219,
+       |  5000,
+       |  7500,
+       |  10000,
+       |  16094,
+       |  15000,
+       |  20000,
+       |  21098,
+       |  30000,
+       |  42195,
+       |  50000,
+       |  80468,
+       |  100000,
+       |  160935
+       |]
+     """.stripMargin
+
   def fromFile(configFile: File): Try[Config] = Try {
     val c = ConfigFactory.parseFile(configFile)
 

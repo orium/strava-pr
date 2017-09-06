@@ -91,6 +91,10 @@ object Main {
   private val ConfigFile: File = new File(ConfigDir, "strava-pr.conf")
   private val CacheFile:  File = new File(ConfigDir, "cache")
 
+  private val GnuplotDir:        File = new File("gnuplot")
+  private val PlotPrGnuplotFile: File = new File(GnuplotDir, "plot-pr-pace.gnuplot")
+  private val PlotPrDataFile:    File = new File(GnuplotDir, "plot-pr-pace.dat")
+
   private def isSetupDone(): Boolean =
     ConfigFile.exists()
 
@@ -98,47 +102,34 @@ object Main {
     ConfigDir.mkdirs()
     val p = new PrintWriter(ConfigFile)
     try {
-      p.write {
-        s"""auth-token = "put a token here"
-           |
-           |show-n-best = 5
-           |only-best-of-each-run = true
-           |
-           |pr-distances = [
-           |  1000,
-           |  1500,
-           |  1610,
-           |  3000,
-           |  3219,
-           |  5000,
-           |  7500,
-           |  10000,
-           |  16094,
-           |  15000,
-           |  20000,
-           |  21098,
-           |  30000,
-           |  42195,
-           |  50000,
-           |  80468,
-           |  100000,
-           |  160935
-           |]
-         """.stripMargin
-      }
+      p.write(Config.DefaultConfigFileContent)
     } finally {
       p.close()
     }
   }
 
-  def benchmark[T](f: => T): T = {
-    val before = System.nanoTime()
-    val r = f
-    val after = System.nanoTime()
+  private def fetchRuns(client: ScravaClient): Set[Run] = {
+    val runCache: RunCache = if (CacheFile.exists()) RunCache.fromFile(CacheFile).get else RunCache.empty
+    val initialCacheSize = runCache.size
 
-    println(f"Executed in ${(after - before)/1000000.0}%.2f")
+    val runs = RateLimiter(client.listAthleteActivities(retrieveAll = true)).flatMap { activitySummary =>
+      runCache.get(activitySummary.id).orElse {
+        Some(RateLimiter(client.retrieveActivity(activitySummary.id)))
+          .collect {
+            case personalActivity: PersonalDetailedActivity => personalActivity
+          }.filter(_.`type` == "Run")
+          .map(activity => Run.fetch(client, activity))
+      }
+    }.toSet
 
-    r
+    // Populate and save cache.
+    runs.foreach(runCache.add)
+    runCache.save(CacheFile)
+
+    println(s"Loaded ${runs.size} runs, of which $initialCacheSize where obtained from the local cache and " +
+      s"${runCache.size - initialCacheSize} new runs were fetched.")
+
+    runs
   }
 
   def main(args: Array[String]): Unit = {
@@ -153,36 +144,22 @@ object Main {
     }
 
     val config: Config = Config.fromFile(ConfigFile).get
+    val client: ScravaClient = new ScravaClient(config.accessToken)
+    val runs: Set[Run] = fetchRuns(client)
 
-    benchmark {
-      val runCache = if (CacheFile.exists()) RunCache.fromFile(CacheFile).get else RunCache.empty
-      val client = new ScravaClient(config.accessToken)
+    // WIP
+    if (true) {
+      def fromTo(start: Int, end: Int, step: Int = 1): Seq[Int] =
+        Stream.iterate(start)(_ + step).takeWhile(_ <= end)
 
-      val runs: Set[Run] = RateLimiter(client.listAthleteActivities(retrieveAll = true)).flatMap { activitySummary =>
-        runCache.get(activitySummary.id).orElse {
-          Some(RateLimiter(client.retrieveActivity(activitySummary.id)))
-            .collect {
-              case personalActivity: PersonalDetailedActivity => personalActivity
-            }.filter(_.`type` == "Run")
-            .map(activity => Run.fetch(client, activity))
-        }
-      }
-        .toSet
+      // Start at 500 meters since it is unlikely that we have accurate GPS information for such short distances.
+      val distances = fromTo(500, 1000000, 50)
+      val personalRecords = PersonalRecords.fromRuns(runs, distances, showNBest = 1, onlyBestOfEachRun = false)
 
-      // Populate and save cache.
-      runs.foreach(runCache.add)
-      runCache.save(CacheFile)
-
-      // WIP
-      if (false) {
-        def fromTo(start: Int, end: Int, step: Int = 1): Seq[Int] =
-          Stream.iterate(start)(_ + step).takeWhile(_ <= end)
-
-        // Start at 500 meters since it is unlikely that we have accurate GPS information for such short distances.
-        val distances = fromTo(500, 1000000, 50)
-        val personalRecords = PersonalRecords.fromRuns(runs, distances, showNBest = 1, onlyBestOfEachRun = false)
-
-        println("# distance      time       pace     pace secs     date")
+      // WIP move this to a method
+      val p = new PrintWriter(PlotPrDataFile)
+      try {
+        p.println("# distance      time       pace     pace secs     date")
 
         distances foreach { distance =>
           val bestTimes = personalRecords.bestTimes(distance)
@@ -193,17 +170,22 @@ object Main {
             val date     = bestTime.run.date
             val pace     = bestTime.pace
 
-            println(f"$distance%10d   $duration%9s   $pace%8s  ${pace.durationPerKm.toSeconds}%10d  $date%6s")
+            p.println(f"$distance%10d   $duration%9s   $pace%8s  ${pace.durationPerKm.toSeconds}%10d  $date%6s")
           }
         }
-
-        // WIP
-        // outputFinegrainedRecords()
-      } else {
-        val personalRecords = PersonalRecords.fromRuns(runs, config.prDistances, config.showNBest, config.onlyBestOfEachRun)
-
-        outputPersonalRecords(personalRecords)
+      } finally {
+        p.close()
       }
+
+      val gnuplotProcess = new ProcessBuilder("gnuplot", GnuplotDir.toPath.relativize(PlotPrGnuplotFile.toPath).toString)
+          .directory(GnuplotDir)
+          .start()
+
+      gnuplotProcess.waitFor()
+    } else {
+      val personalRecords = PersonalRecords.fromRuns(runs, config.prDistances, config.showNBest, config.onlyBestOfEachRun)
+
+      outputPersonalRecords(personalRecords)
     }
   }
 }
