@@ -11,6 +11,7 @@ lazy val stravaPRSettings = Seq(
   scalaVersion := ScalaVersion,
 
   libraryDependencies ++= Seq(
-    Dependency.Scrava
+    Dependency.Scrava,
+    Dependency.TypesafeConfig
   )
 )
