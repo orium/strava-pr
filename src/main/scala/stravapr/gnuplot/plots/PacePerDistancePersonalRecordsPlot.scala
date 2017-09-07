@@ -19,10 +19,19 @@ package stravapr.gnuplot.plots
 import java.io.File
 
 import stravapr.Utils.RichDuration
+import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot.DefaultStartDistance
 import stravapr.gnuplot.{DataFileContent, Plot}
-import stravapr.{PersonalRecords, Run, Runs}
+import stravapr.{PersonalRecords, Runs}
 
-class PacePerDistancePersonalRecordsPlot private (personalRecords: PersonalRecords) extends Plot {
+import scala.concurrent.duration._
+
+class PacePerDistancePersonalRecordsPlot private (
+  personalRecords: PersonalRecords,
+  plotMinTime: Duration = 2.minutes,
+  plotMaxTime: Option[Duration] = None,
+  plotMinDistance: Int = DefaultStartDistance,
+  plotMaxDistance: Option[Int] = None,
+) extends Plot {
   override protected def gnuplotScript(dataFiles: Map[String, File]): Seq[String] =
     s"""set title "Pace by distance for personal records"
        |set ylabel "pace (m:s/km)"
@@ -36,11 +45,13 @@ class PacePerDistancePersonalRecordsPlot private (personalRecords: PersonalRecor
        |set ytics  15
        |set xtics 500
        |
-       |set yrange [120:] # TODO configuration
-       |set offset graph 0, graph 0, graph .05, graph 0
+       |set xrange [$plotMinDistance:${plotMaxDistance.getOrElse("")}]
+       |set yrange [${plotMinTime.toSeconds}:${plotMaxTime.map(_.toSeconds).getOrElse("")}]
+       |set offset graph 0, graph 0, graph .1, graph 0
        |
-       |plot "${dataFiles("plot-pr-pace")}" using 1:4 ls 1 title "pace" with lines rgb "red"
+       |set style line 1 linecolor rgb "red"
        |
+       |plot "${dataFiles("plot-pr-pace")}" using 1:4 ls 1 title "pace" with lines
      """.stripMargin.lines.toSeq
 
   private def dataRows: Seq[String] = {
@@ -72,16 +83,29 @@ class PacePerDistancePersonalRecordsPlot private (personalRecords: PersonalRecor
 
 object PacePerDistancePersonalRecordsPlot {
   // Start at 200 meters since it is unlikely that we have accurate GPS information for such short distances.
-  private val StartDistance: Int = 200
+  private val DefaultStartDistance: Int = 200
   private val DefaultDistanceStep: Int = 25
 
   private def fromTo(start: Int, end: Int, step: Int = 1): Seq[Int] =
     Stream.iterate(start)(_ + step).takeWhile(_ <= end)
 
-  def apply(runs: Runs, distanceStep: Int = DefaultDistanceStep): PacePerDistancePersonalRecordsPlot = {
-    val distances = fromTo(500, 1000000, 50)
+  def apply(
+    runs: Runs,
+    plotMinTime: Duration = 2.minutes,
+    plotMaxTime: Option[Duration] = None,
+    plotMinDistance: Int = DefaultStartDistance,
+    plotMaxDistance: Option[Int] = None,
+    distanceStep: Int = DefaultDistanceStep
+  ): PacePerDistancePersonalRecordsPlot = {
+    val distances = fromTo(plotMinDistance, 1000000, distanceStep)
     val personalRecords = PersonalRecords.fromRuns(runs, distances, showNBest = 1, onlyBestOfEachRun = false)
 
-    new PacePerDistancePersonalRecordsPlot(personalRecords)
+    new PacePerDistancePersonalRecordsPlot(
+      personalRecords,
+      plotMinTime,
+      plotMaxTime,
+      plotMinDistance,
+      plotMaxDistance,
+    )
   }
 }

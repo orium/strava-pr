@@ -24,7 +24,9 @@ import kiambogo.scrava.models.{PersonalDetailedActivity, RateLimitException}
 import scala.concurrent.duration._
 import scala.util.Properties
 import Utils.RichDuration
+import stravapr.animation.Gif
 import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot
+import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot.DefaultStartDistance
 
 object RateLimiter {
   private var backoff: Duration = 0.seconds
@@ -143,27 +145,43 @@ object Main {
     val client: ScravaClient = new ScravaClient(config.accessToken)
     val runs: Runs = fetchRuns(client)
 
-    2 match {
-      case 2 =>
-        runs.runHistory foreach { runs =>
-          val plot = PacePerDistancePersonalRecordsPlot(runs)
-          val TimeSpan(start, end) = runs.timeSpan.get
+    "history" match {
+      case "history" =>
+        val images = runs.runHistory map { runsSlice =>
+          val plot = PacePerDistancePersonalRecordsPlot(
+            runsSlice,
+            plotMinTime = 2.minutes,
+            plotMaxTime = Some(8.minutes),
+            plotMinDistance = 500,
+            plotMaxDistance = Some(runs.stats.get.maxDistance),
+          )
+          val TimeSpan(start, end) = runsSlice.timeSpan.get
 
           println(s"Runs from $start to $end.")
 
-          plot.createPNGImage(new File(s"/tmp/orium/runs/$end.png"))
+          val imageFile = new File(s"/tmp/orium/runs/$end.png")
+          plot.createPNGImage(imageFile)
 
+          imageFile
         }
-      case 0 =>
+
+        Gif.createGif(
+          new File(s"/tmp/orium/runs/animated.gif"),
+          images,
+          delay = 60,
+          loop = Some(1)
+        )
+      case "show" =>
         val plot = PacePerDistancePersonalRecordsPlot(runs)
 
-        plot.createPNGImage(new File("/tmp/orium/p.png"))
+        // plot.createPNGImage(new File("/tmp/orium/p.png"))
 
         plot.showPlot()
-      case 1 =>
+      case "table" =>
         val personalRecords = PersonalRecords.fromRuns(runs, config.prDistances, config.showNBest, config.onlyBestOfEachRun)
 
         outputPersonalRecords(personalRecords)
+      case _ =>
     }
   }
 }

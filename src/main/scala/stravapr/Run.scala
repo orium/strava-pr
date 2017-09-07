@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit
 
 import kiambogo.scrava.ScravaClient
 import kiambogo.scrava.models.{PersonalDetailedActivity, Streams}
-import org.joda.time.Interval
 
 import scala.concurrent.duration.Duration
 
@@ -99,6 +98,7 @@ class Run(
     time.map(Duration(_, TimeUnit.SECONDS))
   }
 
+  // TODO Run.Stats
   def totalDistance: Int = distances.last
 
   private def allTimesForDistance(distance: Int): Seq[DistanceDuration] = {
@@ -138,6 +138,17 @@ class Runs private (runSet: Seq[Run]) extends Traversable[Run] {
   def dropAfter(dateTime: LocalDateTime): Runs =
     new Runs(runSet.takeWhile(_.datetime.compareTo(dateTime) <= 0))
 
+  def stats: Option[Runs.Stats] =
+    if (runSet.isEmpty) {
+      None
+    } else {
+      Some {
+        Runs.Stats(
+          maxDistance = runSet.map(_.totalDistance).max
+        )
+      }
+    }
+
   def timeSpan: Option[TimeSpan] = for {
     first <- runSet.headOption
     last  <- runSet.lastOption
@@ -156,4 +167,8 @@ object Runs {
 
   def apply(runSet: Set[Run]): Runs =
     new Runs(runSet.toSeq.sortBy(_.datetime.toEpochSecond(ZoneOffset.UTC)))
+
+  case class Stats(
+    maxDistance: Int
+  )
 }

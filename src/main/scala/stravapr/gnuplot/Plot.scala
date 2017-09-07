@@ -64,7 +64,7 @@ trait Plot {
         scriptBody ++ pauseForEnterTail
     }
 
-    dumpToTempFile(completeScript, s"strava-pr-plot", ".gnuplot")
+    dumpToTempFile(completeScript, "strava-pr-plot", ".gnuplot")
   }
 
   def createPNGImage(imageFilename: File): Unit = {
@@ -88,7 +88,7 @@ trait Plot {
 object Plot {
   sealed trait Type
   object Type {
-    case object Show                          extends Type
-    case class CreateImage(imageFilename: File) extends Type
+    case object Show extends Type
+    case class  CreateImage(imageFilename: File) extends Type
   }
 }
