@@ -34,6 +34,8 @@ class RunCache private (cache: MutableMap[Int, Run]) {
 
   def add(runs: Runs): Unit = runs.foreach(add)
 
+  def allRuns: Runs = Runs(cache.values.toSet)
+
   def save(file: File): Unit = {
     val runConfigs = cache.values.map { run =>
       ConfigValueFactory.fromMap(

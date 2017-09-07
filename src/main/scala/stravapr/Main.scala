@@ -20,13 +20,12 @@ import java.io.{File, PrintWriter}
 
 import kiambogo.scrava.ScravaClient
 import kiambogo.scrava.models.{PersonalDetailedActivity, RateLimitException}
+import stravapr.Utils.RichDuration
+import stravapr.animation.Gif
+import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot
 
 import scala.concurrent.duration._
 import scala.util.Properties
-import Utils.RichDuration
-import stravapr.animation.Gif
-import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot
-import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot.DefaultStartDistance
 
 object RateLimiter {
   private var backoff: Duration = 0.seconds
@@ -104,7 +103,7 @@ object Main {
     }
   }
 
-  private def fetchRuns(client: ScravaClient): Runs = {
+  private def fetchRuns(client: ScravaClient): Unit = {
     val runCache: RunCache = if (CacheFile.exists()) RunCache.fromFile(CacheFile).get else RunCache.empty
     val initialCacheSize = runCache.size
 
@@ -124,10 +123,13 @@ object Main {
     runCache.add(runs)
     runCache.save(CacheFile)
 
-    println(s"Loaded ${runs.size} runs, of which $initialCacheSize where obtained from the local cache and " +
-      s"${runCache.size - initialCacheSize} new runs were fetched.")
+    println(s"Fetched ${runCache.size - initialCacheSize} new runs.")
+    println(s"You have now a total of ${runs.size} runs.")
+  }
 
-    runs
+  private def allRuns(): Runs = {
+    val runCache: RunCache = if (CacheFile.exists()) RunCache.fromFile(CacheFile).get else RunCache.empty
+    runCache.allRuns
   }
 
   def main(args: Array[String]): Unit = {
@@ -142,10 +144,13 @@ object Main {
     }
 
     val config: Config = Config.fromFile(ConfigFile).get
-    val client: ScravaClient = new ScravaClient(config.accessToken)
-    val runs: Runs = fetchRuns(client)
+    val runs: Runs = allRuns()
 
-    "history" match {
+    args(0) match {
+      case "fetch" =>
+        val client: ScravaClient = new ScravaClient(config.accessToken)
+
+        fetchRuns(client)
       case "history" =>
         val images = runs.runHistory map { runsSlice =>
           val plot = PacePerDistancePersonalRecordsPlot(
@@ -166,7 +171,7 @@ object Main {
         }
 
         Gif.createGif(
-          new File(s"/tmp/orium/runs/animated.gif"),
+          new File("/tmp/orium/runs/animated.gif"),
           images,
           delay = 60,
           loop = Some(1)

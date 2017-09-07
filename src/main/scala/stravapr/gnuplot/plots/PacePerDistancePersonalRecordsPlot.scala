@@ -34,6 +34,9 @@ class PacePerDistancePersonalRecordsPlot private (
 ) extends Plot {
   override protected def gnuplotScript(dataFiles: Map[String, File]): Seq[String] =
     s"""set title "Pace by distance for personal records"
+       |
+       |set nokey
+       |
        |set ylabel "pace (m:s/km)"
        |set xlabel "distance (m)"
        |
@@ -49,28 +52,49 @@ class PacePerDistancePersonalRecordsPlot private (
        |set yrange [${plotMinTime.toSeconds}:${plotMaxTime.map(_.toSeconds).getOrElse("")}]
        |set offset graph 0, graph 0, graph .1, graph 0
        |
-       |set style line 1 linecolor rgb "red"
+       |set palette maxcolors 12
+       |set palette defined ( \\
+       |   0 '#a6cee3', \\
+       |   1 '#1f78b4', \\
+       |   2 '#b2df8a', \\
+       |   3 '#33a02c', \\
+       |   4 '#fb9a99', \\
+       |   5 '#e31a1c', \\
+       |   6 '#fdbf6f', \\
+       |   7 '#ff6f00', \\
+       |   8 '#cab2d6', \\
+       |   9 '#6a3d9a', \\
+       |  10 '#aaaa55', \\
+       |  11 '#b15928'  \\
+       |)
        |
-       |plot "${dataFiles("plot-pr-pace")}" using 1:4 ls 1 title "pace" with lines
+       |set cbrange [0:12]
+       |unset colorbox
+       |
+       |set style line 1 palette
+       |set style line 1 linewidth 3
+       |
+       |plot "${dataFiles("plot-pr-pace")}" using 1:4:6 ls 1 with lines
      """.stripMargin.lines.toSeq
 
   private def dataRows: Seq[String] = {
-    val header = "# distance      time       pace     pace secs     date"
+    val header = "# distance      time       pace      pace secs     date     color"
 
-    personalRecords.distances flatMap { distance =>
+    val data = personalRecords.distances flatMap { distance =>
       val bestTimes = personalRecords.bestTimes(distance)
 
-      if (bestTimes.nonEmpty) {
-        val bestTime = bestTimes.bestTime.get
+      bestTimes.headOption.map { bestTime =>
         val duration = bestTime.duration.formatHMS().filterNot(_.isSpaceChar)
         val date     = bestTime.run.date
         val pace     = bestTime.pace
 
-        Some(f"$distance%10d   $duration%9s   $pace%8s  ${pace.durationPerKm.toSeconds}%10d  $date%6s")
-      } else {
-        None
+        val color = Math.abs(bestTime.run.datetime.hashCode()) % 12
+
+        f"$distance%10d   $duration%9s   $pace%8s  ${pace.durationPerKm.toSeconds}%10d  $date%6s     $color"
       }
     }
+
+    header +: data
   }
 
   override protected def data: Set[DataFileContent] = Set(
@@ -97,8 +121,8 @@ object PacePerDistancePersonalRecordsPlot {
     plotMaxDistance: Option[Int] = None,
     distanceStep: Int = DefaultDistanceStep
   ): PacePerDistancePersonalRecordsPlot = {
-    val distances = fromTo(plotMinDistance, 1000000, distanceStep)
-    val personalRecords = PersonalRecords.fromRuns(runs, distances, showNBest = 1, onlyBestOfEachRun = false)
+    val distances = fromTo(plotMinDistance, runs.map(_.totalDistance).max, distanceStep)
+    val personalRecords = PersonalRecords.fromRuns(runs, distances, showNBest = 1)
 
     new PacePerDistancePersonalRecordsPlot(
       personalRecords,
