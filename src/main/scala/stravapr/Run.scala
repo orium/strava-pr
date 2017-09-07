@@ -16,13 +16,14 @@
 
 package stravapr
 
-import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.{LocalDate, LocalDateTime, ZoneOffset}
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
 import kiambogo.scrava.ScravaClient
 import kiambogo.scrava.models.{PersonalDetailedActivity, Streams}
+import org.joda.time.Interval
 
 import scala.concurrent.duration.Duration
 
@@ -61,11 +62,13 @@ object DistanceDuration {
 
 class Run(
   val id: Int,
-  val date: LocalDate,
+  val datetime: LocalDateTime,
   val times: Array[Int],
   val distances: Array[Int]
 ) {
   import DistanceDuration.DistanceDurationIsOrdered
+
+  def date: LocalDate = datetime.toLocalDate
 
   private def interpolate(d1: Int, t1: Int, d2: Int, t2: Int, d: Int): Int = {
     val m = (t1 - t2).toDouble / (d1 - d2).toDouble
@@ -122,8 +125,35 @@ object Run {
     }
     val times: Array[Int] = timeDistance(0).data.map(_.asInstanceOf[Int]).toArray
     val distances: Array[Int] = timeDistance(1).data.map(_.asInstanceOf[Float].round).toArray
-    val date = LocalDate.parse(activity.start_date, DateTimeFormatter.ISO_ZONED_DATE_TIME)
+    val date = LocalDateTime.parse(activity.start_date, DateTimeFormatter.ISO_DATE_TIME)
 
     new Run(activity.id, date, times, distances)
   }
+}
+
+case class TimeSpan(start: LocalDateTime, end: LocalDateTime)
+
+/** Collection of runs.  This is always sorted chronologically. */
+class Runs private (runSet: Seq[Run]) extends Traversable[Run] {
+  def dropAfter(dateTime: LocalDateTime): Runs =
+    new Runs(runSet.takeWhile(_.datetime.compareTo(dateTime) <= 0))
+
+  def timeSpan: Option[TimeSpan] = for {
+    first <- runSet.headOption
+    last  <- runSet.lastOption
+  } yield TimeSpan(first.datetime, last.datetime)
+
+  def runHistory: Seq[Runs] =
+    runSet.inits.map(new Runs(_)).toSeq.reverse
+      .drop(1) // Drop empty
+
+  override def foreach[U](f: (Run) => U): Unit =
+    runSet.foreach(f)
+}
+
+object Runs {
+  val empty: Runs = apply(Set.empty)
+
+  def apply(runSet: Set[Run]): Runs =
+    new Runs(runSet.toSeq.sortBy(_.datetime.toEpochSecond(ZoneOffset.UTC)))
 }

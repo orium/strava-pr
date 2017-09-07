@@ -17,7 +17,7 @@
 package stravapr
 
 import java.io.{File, PrintWriter}
-import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 import com.typesafe.config.{ConfigFactory, ConfigRenderOptions, ConfigValueFactory, Config => TypesafeConfig}
@@ -32,13 +32,15 @@ class RunCache private (cache: MutableMap[Int, Run]) {
 
   def add(run: Run): Unit = cache += run.id -> run
 
+  def add(runs: Runs): Unit = runs.foreach(add)
+
   def save(file: File): Unit = {
     val runConfigs = cache.values.map { run =>
       ConfigValueFactory.fromMap(
         Map(
           "version"   -> RunCache.RunFormatVersion,
           "id"        -> run.id,
-          "date"      -> run.date.toString,
+          "datetime"  -> run.datetime.toString,
           "times"     -> run.times.toSeq.asJava,
           "distances" -> run.distances.toSeq.asJava
         ).asJava
@@ -62,7 +64,7 @@ class RunCache private (cache: MutableMap[Int, Run]) {
 }
 
 object RunCache {
-  private val RunFormatVersion: Int = 0
+  private val RunFormatVersion: Int = 1
 
   val empty = new RunCache(MutableMap.empty)
 
@@ -76,11 +78,11 @@ object RunCache {
       assume(version == RunFormatVersion, "Unknown run format version in run cache")
 
       val id        = run.getInt("id")
-      val date      = LocalDate.parse(run.getString("date"), DateTimeFormatter.ISO_DATE)
+      val datetime  = LocalDateTime.parse(run.getString("datetime"), DateTimeFormatter.ISO_DATE_TIME)
       val times     = run.getIntList("times").asScala.map(_.toInt).toArray
       val distances = run.getIntList("distances").asScala.map(_.toInt).toArray
 
-      id -> new Run(id, date, times, distances)
+      id -> new Run(id, datetime, times, distances)
     }
 
     new RunCache(MutableMap(cache: _*))

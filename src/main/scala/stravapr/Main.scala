@@ -23,6 +23,8 @@ import kiambogo.scrava.models.{PersonalDetailedActivity, RateLimitException}
 
 import scala.concurrent.duration._
 import scala.util.Properties
+import Utils.RichDuration
+import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot
 
 object RateLimiter {
   private var backoff: Duration = 0.seconds
@@ -49,14 +51,6 @@ object RateLimiter {
 }
 
 object Main {
-  private def formatDuration(duration: Duration): String = {
-    val s = duration.toSeconds % 60
-    val m = duration.toSeconds / 60 % 60
-    val h = duration.toSeconds / 60 / 60
-
-    f"$h h $m%02d m $s%02d s"
-  }
-
   private def outputPersonalRecords(personalRecords: PersonalRecords): Unit = {
     var first = true
 
@@ -74,7 +68,7 @@ object Main {
 
         bestTimes foreach { distanceDuration: DistanceDuration =>
           val run = distanceDuration.run
-          val formatedDuration = formatDuration(distanceDuration.duration)
+          val formatedDuration = distanceDuration.duration.formatHMS()
           val url = s"https://www.strava.com/activities/${run.id}"
           val runDist = run.totalDistance
           val pace = distanceDuration.pace
@@ -108,22 +102,24 @@ object Main {
     }
   }
 
-  private def fetchRuns(client: ScravaClient): Set[Run] = {
+  private def fetchRuns(client: ScravaClient): Runs = {
     val runCache: RunCache = if (CacheFile.exists()) RunCache.fromFile(CacheFile).get else RunCache.empty
     val initialCacheSize = runCache.size
 
-    val runs = RateLimiter(client.listAthleteActivities(retrieveAll = true)).flatMap { activitySummary =>
-      runCache.get(activitySummary.id).orElse {
-        Some(RateLimiter(client.retrieveActivity(activitySummary.id)))
-          .collect {
-            case personalActivity: PersonalDetailedActivity => personalActivity
-          }.filter(_.`type` == "Run")
-          .map(activity => Run.fetch(client, activity))
-      }
-    }.toSet
+    val runs = Runs {
+      RateLimiter(client.listAthleteActivities(retrieveAll = true)).flatMap { activitySummary =>
+        runCache.get(activitySummary.id).orElse {
+          Some(RateLimiter(client.retrieveActivity(activitySummary.id)))
+            .collect {
+              case personalActivity: PersonalDetailedActivity => personalActivity
+            }.filter(_.`type` == "Run")
+            .map(activity => Run.fetch(client, activity))
+        }
+      }.toSet
+    }
 
     // Populate and save cache.
-    runs.foreach(runCache.add)
+    runCache.add(runs)
     runCache.save(CacheFile)
 
     println(s"Loaded ${runs.size} runs, of which $initialCacheSize where obtained from the local cache and " +
@@ -145,47 +141,29 @@ object Main {
 
     val config: Config = Config.fromFile(ConfigFile).get
     val client: ScravaClient = new ScravaClient(config.accessToken)
-    val runs: Set[Run] = fetchRuns(client)
+    val runs: Runs = fetchRuns(client)
 
-    // WIP
-    if (true) {
-      def fromTo(start: Int, end: Int, step: Int = 1): Seq[Int] =
-        Stream.iterate(start)(_ + step).takeWhile(_ <= end)
+    2 match {
+      case 2 =>
+        runs.runHistory foreach { runs =>
+          val plot = PacePerDistancePersonalRecordsPlot(runs)
+          val TimeSpan(start, end) = runs.timeSpan.get
 
-      // Start at 500 meters since it is unlikely that we have accurate GPS information for such short distances.
-      val distances = fromTo(500, 1000000, 50)
-      val personalRecords = PersonalRecords.fromRuns(runs, distances, showNBest = 1, onlyBestOfEachRun = false)
+          println(s"Runs from $start to $end.")
 
-      // WIP move this to a method
-      val p = new PrintWriter(PlotPrDataFile)
-      try {
-        p.println("# distance      time       pace     pace secs     date")
+          plot.createPNGImage(new File(s"/tmp/orium/runs/$end.png"))
 
-        distances foreach { distance =>
-          val bestTimes = personalRecords.bestTimes(distance)
-
-          if (bestTimes.nonEmpty) {
-            val bestTime = bestTimes.bestTime.get
-            val duration = formatDuration(bestTime.duration).filterNot(_.isSpaceChar)
-            val date     = bestTime.run.date
-            val pace     = bestTime.pace
-
-            p.println(f"$distance%10d   $duration%9s   $pace%8s  ${pace.durationPerKm.toSeconds}%10d  $date%6s")
-          }
         }
-      } finally {
-        p.close()
-      }
+      case 0 =>
+        val plot = PacePerDistancePersonalRecordsPlot(runs)
 
-      val gnuplotProcess = new ProcessBuilder("gnuplot", GnuplotDir.toPath.relativize(PlotPrGnuplotFile.toPath).toString)
-          .directory(GnuplotDir)
-          .start()
+        plot.createPNGImage(new File("/tmp/orium/p.png"))
 
-      gnuplotProcess.waitFor()
-    } else {
-      val personalRecords = PersonalRecords.fromRuns(runs, config.prDistances, config.showNBest, config.onlyBestOfEachRun)
+        plot.showPlot()
+      case 1 =>
+        val personalRecords = PersonalRecords.fromRuns(runs, config.prDistances, config.showNBest, config.onlyBestOfEachRun)
 
-      outputPersonalRecords(personalRecords)
+        outputPersonalRecords(personalRecords)
     }
   }
 }

@@ -24,9 +24,9 @@ class BestTimes private (val distance: Int, bestTimes: Seq[DistanceDuration]) ex
 
 object BestTimes {
   def empty(distance: Int): BestTimes =
-    fromRuns(Set.empty, distance, bestN = 0)
+    fromRuns(Runs.empty, distance, bestN = 0)
 
-  def fromRuns(runs: Set[Run], distance: Int, bestN: Int, onlyBestOfEachRun: Boolean = false): BestTimes = {
+  def fromRuns(runs: Runs, distance: Int, bestN: Int, onlyBestOfEachRun: Boolean = false): BestTimes = {
     val bestTimes: Seq[DistanceDuration] =
       runs.flatMap(run => if (onlyBestOfEachRun) run.bestTime(distance) else run.bestTimes(distance)).toSeq.sorted
 
@@ -41,7 +41,7 @@ class PersonalRecords private (prMap: Map[Int, BestTimes]) {
 }
 
 object PersonalRecords {
-  def fromRuns(runs: Set[Run], distances: Seq[Int], showNBest: Int, onlyBestOfEachRun: Boolean = false): PersonalRecords = {
+  def fromRuns(runs: Runs, distances: Seq[Int], showNBest: Int, onlyBestOfEachRun: Boolean = false): PersonalRecords = {
     val prMap = distances.map { distance =>
       distance -> BestTimes.fromRuns(runs, distance, showNBest, onlyBestOfEachRun)
     }.toMap
