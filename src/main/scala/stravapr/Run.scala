@@ -67,6 +67,8 @@ class Run(
 ) {
   import DistanceDuration.DistanceDurationIsOrdered
 
+  require(distances.head == 0, "First distance must be zero")
+
   def date: LocalDate = datetime.toLocalDate
 
   private def interpolate(d1: Int, t1: Int, d2: Int, t2: Int, d: Int): Int = {
@@ -76,27 +78,19 @@ class Run(
     (m * d + b).round.toInt
   }
 
-  def timeAt(distance: Int): Option[Duration] = {
-    val time: Option[Int] = Arrays.binarySearch(distances, distance) match {
-      case i if i >= 0 => Some(times(i))
-      case i =>
-        val indexBefore = -i - 2
-        val indexAfter = indexBefore + 1
-
-        if (indexAfter >= distances.length) {
-          None
-        } else {
-          val distanceBefore = distances(indexBefore)
-          val timeBefore     = times(indexBefore)
-          val distanceAfter  = distances(indexAfter)
-          val timeAfter      = times(indexAfter)
-
-          Some(interpolate(distanceBefore, timeBefore, distanceAfter, timeAfter, distance))
+  private lazy val timeAtDistance: Array[Duration] = {
+    val t = 0 +:
+      (distances zip times).sliding(2).flatMap { case Array((distanceBefore, timeBefore), (distanceAfter, timeAfter)) =>
+        ((distanceBefore + 1) to distanceAfter) map { distance =>
+          interpolate(distanceBefore, timeBefore, distanceAfter, timeAfter, distance)
         }
-    }
+      }.toSeq
 
-    time.map(Duration(_, TimeUnit.SECONDS))
+    t.map(Duration(_, TimeUnit.SECONDS)).toArray
   }
+
+  def timeAt(distance: Int): Option[Duration] =
+    if (0 <= distance && distance <= totalDistance) Some(timeAtDistance(distance)) else None
 
   // TODO Run.Stats
   def totalDistance: Int = distances.last
@@ -123,11 +117,11 @@ object Run {
     val timeDistance: Seq[Streams] = RateLimiter {
       client.retrieveActivityStream(activity.id.toString, Some("time,distance"))
     }
-    val times: Array[Int] = timeDistance(0).data.map(_.asInstanceOf[Int]).toArray
-    val distances: Array[Int] = timeDistance(1).data.map(_.asInstanceOf[Float].round).toArray
-    val date = LocalDateTime.parse(activity.start_date, DateTimeFormatter.ISO_DATE_TIME)
+    val times     = timeDistance(0).data.map(_.asInstanceOf[Int]).toArray
+    val distances = timeDistance(1).data.map(_.asInstanceOf[Float].round).toArray
+    val datetime  = LocalDateTime.parse(activity.start_date, DateTimeFormatter.ISO_DATE_TIME)
 
-    new Run(activity.id, date, times, distances)
+    new Run(activity.id, datetime, times, distances)
   }
 }
 
