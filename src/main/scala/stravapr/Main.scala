@@ -173,8 +173,8 @@ object Main {
         Gif.createGif(
           new File("/tmp/orium/runs/animated.gif"),
           images,
-          delay = 60,
-          loop = None // WIP Some(1)
+          delay = 250.milliseconds,
+          loop = false
         )
       case "show" =>
         val plot = PacePerDistancePersonalRecordsPlot(runs)

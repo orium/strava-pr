@@ -16,24 +16,26 @@
 
 package stravapr.animation
 
+import java.awt.image.BufferedImage
 import java.io.File
 
-import scala.collection.JavaConverters._
+import com.sksamuel.scrimage.Image
+import com.sksamuel.scrimage.nio.StreamingGifWriter
+
+import scala.concurrent.duration.Duration
 
 object Gif {
   def createGif(
     gifFilename: File,
     images: Seq[File],
-    delay: Int,
-    loop: Option[Int] = None
+    delay: Duration,
+    loop: Boolean = false
   ): Unit = {
-    val cmd = Seq("convert", "-delay", delay.toString, "-loop", loop.getOrElse(0).toString) ++
-      images.map(_.toString) ++ Seq(gifFilename.toString)
+    val writer = StreamingGifWriter(delay, loop)
+    val stream = writer.prepareStream(gifFilename, BufferedImage.TYPE_INT_ARGB)
 
-    val process =
-      new ProcessBuilder(cmd.asJava)
-        .start()
+    images.map(Image.fromFile).foreach(stream.writeFrame)
 
-    process.waitFor()
+    stream.finish()
   }
 }
