@@ -33,11 +33,11 @@ class PacePerDistancePersonalRecordsPlot private (
   plotMaxDistance: Option[Int] = None,
 ) extends Plot {
   override protected def gnuplotScript(dataFiles: Map[String, File]): Seq[String] =
-    s"""set title "Pace by distance for personal records"
+    s"""set title "Best Pace by distance"
        |
        |set nokey
        |
-       |set ylabel "pace (m:s/km)"
+       |set ylabel "best pace (m:s/km)"
        |set xlabel "distance (m)"
        |
        |set grid ytics xtics
@@ -107,7 +107,7 @@ class PacePerDistancePersonalRecordsPlot private (
 
 object PacePerDistancePersonalRecordsPlot {
   // Start at 200 meters since it is unlikely that we have accurate GPS information for such short distances.
-  private val DefaultStartDistance: Int = 200
+  private val DefaultStartDistance: Int = 500
   private val DefaultDistanceStep: Int = 25
 
   private def fromTo(start: Int, end: Int, step: Int = 1): Seq[Int] =
@@ -121,7 +121,8 @@ object PacePerDistancePersonalRecordsPlot {
     plotMaxDistance: Option[Int] = None,
     distanceStep: Int = DefaultDistanceStep
   ): PacePerDistancePersonalRecordsPlot = {
-    val distances = fromTo(plotMinDistance, runs.map(_.totalDistance).max, distanceStep)
+    val maxDistance = runs.stats.get.maxDistance
+    val distances = fromTo(plotMinDistance, maxDistance, distanceStep)
     val personalRecords = PersonalRecords.fromRuns(runs, distances, showNBest = 1)
 
     new PacePerDistancePersonalRecordsPlot(
@@ -129,7 +130,7 @@ object PacePerDistancePersonalRecordsPlot {
       plotMinTime,
       plotMaxTime,
       plotMinDistance,
-      plotMaxDistance,
+      plotMaxDistance.orElse(Some(maxDistance)),
     )
   }
 }

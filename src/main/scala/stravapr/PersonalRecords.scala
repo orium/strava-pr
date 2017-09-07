@@ -16,10 +16,10 @@
 
 package stravapr
 
-class BestTimes private (val distance: Int, bestTimes: Seq[DistanceDuration]) extends Traversable[DistanceDuration] {
-  def bestTime: Option[DistanceDuration] = bestTimes.headOption
+class BestTimes private (val distance: Int, bestTimes: Seq[RunSlice]) extends Traversable[RunSlice] {
+  def bestTime: Option[RunSlice] = bestTimes.headOption
 
-  override def foreach[U](f: (DistanceDuration) => U): Unit = bestTimes.foreach(f)
+  override def foreach[U](f: (RunSlice) => U): Unit = bestTimes.foreach(f)
 }
 
 object BestTimes {
@@ -27,7 +27,7 @@ object BestTimes {
     fromRuns(Runs.empty, distance, bestN = 0)
 
   def fromRuns(runs: Runs, distance: Int, bestN: Int, onlyBestOfEachRun: Boolean = false): BestTimes = {
-    val bestTimes: Seq[DistanceDuration] =
+    val bestTimes: Seq[RunSlice] =
       runs.flatMap(run => if (onlyBestOfEachRun) run.bestTime(distance) else run.bestTimes(distance)).toSeq.sorted
 
     new BestTimes(distance, bestTimes.take(bestN))

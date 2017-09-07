@@ -26,7 +26,7 @@ import kiambogo.scrava.models.{PersonalDetailedActivity, Streams}
 
 import scala.concurrent.duration.Duration
 
-class Pace private(val durationPerKm: Duration) {
+class Pace private (val durationPerKm: Duration) {
   override def toString: String = {
     val secs = durationPerKm.toSeconds
     f"""${secs / 60}%02d'${secs % 60}%02d"/km"""
@@ -41,13 +41,13 @@ object Pace {
   }
 }
 
-case class DistanceDuration(distance: Int, startAt: Int, duration: Duration, run: Run) {
+case class RunSlice(distance: Int, startAt: Int, duration: Duration, run: Run) {
   def pace: Pace = Pace(distance, duration)
 }
 
-object DistanceDuration {
-  implicit object DistanceDurationIsOrdered extends Ordering[DistanceDuration] {
-    def compare(a: DistanceDuration, b: DistanceDuration): Int = {
+object RunSlice {
+  implicit object DistanceDurationIsOrdered extends Ordering[RunSlice] {
+    def compare(a: RunSlice, b: RunSlice): Int = {
       // We disambiguate to that we have a deterministic order.
       Seq(
         a.duration compare b.duration,
@@ -65,7 +65,7 @@ class Run(
   val times: Array[Int],
   val distances: Array[Int]
 ) {
-  import DistanceDuration.DistanceDurationIsOrdered
+  import RunSlice.DistanceDurationIsOrdered
 
   require(distances.head == 0, "First distance must be zero")
 
@@ -95,20 +95,20 @@ class Run(
   // TODO Run.Stats
   def totalDistance: Int = distances.last
 
-  private def allTimesForDistance(distance: Int): Seq[DistanceDuration] = {
+  private def allTimesForDistance(distance: Int): Seq[RunSlice] = {
     (0 to (totalDistance - distance)).map { startDistance =>
       val time = timeAt(startDistance + distance).get - timeAt(startDistance).get
 
-      DistanceDuration(distance, startDistance, time, this)
+      RunSlice(distance, startDistance, time, this)
     }
   }
 
-  def bestTimes(distance: Int): Seq[DistanceDuration] = {
+  def bestTimes(distance: Int): Seq[RunSlice] = {
     // We ignore repeated times in the same run.
     allTimesForDistance(distance).groupBy(_.duration).values.map(_.min).toSeq.sorted
   }
 
-  def bestTime(distance: Int): Option[DistanceDuration] =
+  def bestTime(distance: Int): Option[RunSlice] =
     bestTimes(distance).headOption
 }
 

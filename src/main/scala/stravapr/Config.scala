@@ -23,11 +23,19 @@ import com.typesafe.config.ConfigFactory
 import scala.collection.JavaConverters._
 import scala.util.Try
 
-case class Config(accessToken: String, showNBest: Int, onlyBestOfEachRun: Boolean, prDistances: Seq[Int])
+case class Config(
+  accessToken: String,
+  imgurClientId: Option[String],
+  showNBest: Int,
+  onlyBestOfEachRun: Boolean,
+  prDistances: Seq[Int]
+)
 
 object Config {
   val DefaultConfigFileContent: String =
     s"""auth-token = "put a token here"
+       |
+       |# imgur-client-id = "put a client here"
        |
        |show-n-best = 5
        |only-best-of-each-run = true
@@ -57,11 +65,12 @@ object Config {
   def fromFile(configFile: File): Try[Config] = Try {
     val c = ConfigFactory.parseFile(configFile)
 
-    val authToken   = c.getString("auth-token")
-    val showNBest   = c.getInt("show-n-best")
+    val authToken     = c.getString("auth-token")
+    val imgurClientId = if (c.hasPath("imgur-client-id")) Some(c.getString("imgur-client-id")) else None
+    val showNBest     = c.getInt("show-n-best")
     val onlyBestOfEachRun = c.getBoolean("only-best-of-each-run")
-    val prDistances = c.getNumberList("pr-distances").asScala.map(_.intValue())
+    val prDistances   = c.getNumberList("pr-distances").asScala.map(_.intValue())
 
-    Config(authToken, showNBest, onlyBestOfEachRun, prDistances)
+    Config(authToken, imgurClientId, showNBest, onlyBestOfEachRun, prDistances)
   }
 }

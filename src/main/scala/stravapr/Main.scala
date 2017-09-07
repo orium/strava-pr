@@ -67,7 +67,7 @@ object Main {
         println()
         println("         time            date        pace        start at (m)   total run dist (m)   url")
 
-        bestTimes foreach { distanceDuration: DistanceDuration =>
+        bestTimes foreach { distanceDuration: RunSlice =>
           val run = distanceDuration.run
           val formatedDuration = distanceDuration.duration.formatHMS()
           val url = s"https://www.strava.com/activities/${run.id}"
@@ -174,7 +174,7 @@ object Main {
           new File("/tmp/orium/runs/animated.gif"),
           images,
           delay = 60,
-          loop = Some(1)
+          loop = None // WIP Some(1)
         )
       case "show" =>
         val plot = PacePerDistancePersonalRecordsPlot(runs)
@@ -182,6 +182,22 @@ object Main {
         // plot.createPNGImage(new File("/tmp/orium/p.png"))
 
         plot.showPlot()
+      case "upload" =>
+        config.imgurClientId match {
+          case Some(clientId) =>
+            val plot = PacePerDistancePersonalRecordsPlot(runs)
+            val pngFile = plot.createPNGImage()
+
+            val imgurUploader = new ImgurUploader(clientId)
+
+            val url = imgurUploader.upload(pngFile).get
+
+            pngFile.delete()
+
+            println(s"url: $url")
+          case None =>
+            println("No imgur client id defined.")
+        }
       case "table" =>
         val personalRecords = PersonalRecords.fromRuns(runs, config.prDistances, config.showNBest, config.onlyBestOfEachRun)
 

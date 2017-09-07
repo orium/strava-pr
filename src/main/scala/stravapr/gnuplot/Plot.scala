@@ -35,7 +35,7 @@ trait Plot {
   protected def data: Set[DataFileContent]
 
   private def dumpToTempFile(lines: Seq[String], filenamePrefix: String, filenameSuffix: String): File = {
-    val file = File.createTempFile(filenamePrefix, ".tmp")
+    val file = File.createTempFile(filenamePrefix, filenameSuffix)
     file.deleteOnExit()
 
     val p = new PrintWriter(file)
@@ -70,6 +70,12 @@ trait Plot {
   def createPNGImage(imageFilename: File): Unit = {
     val gnuplotFile = createGnuplotFile(Plot.Type.CreateImage(imageFilename))
     runGnuplot(gnuplotFile)
+  }
+
+  def createPNGImage(): File = {
+    val pngFile = File.createTempFile("strava-pr", ".png")
+    createPNGImage(pngFile)
+    pngFile
   }
 
   private def runGnuplot(gnuplotFile: File): Unit = {
