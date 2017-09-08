@@ -58,7 +58,7 @@ class PersonalRecords private (val runs: Runs) {
   def bestTime(distance: Int): Option[RunSlice] = bestTimes(distance).headOption
 
   def bestTimes(distance: Int): BestTimes =
-    if (distance > runs.stats.get.maxDistance) {
+    if (distance > runs.stats.maxDistance) {
       BestTimes.empty(distance)
     } else {
       prMap.getOrElse(distance, {

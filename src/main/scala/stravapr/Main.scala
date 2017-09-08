@@ -146,43 +146,64 @@ object Main {
     val config: Config = Config.fromFile(ConfigFile).get
     val runs: Runs = allRuns()
 
-    args(0) match {
-      case "fetch" =>
+    args.toSeq match {
+      case Seq("fetch") =>
         val client: ScravaClient = new ScravaClient(config.accessToken)
 
         fetchRuns(client)
-      case "history" =>
-        val (_, images) = runs
-          .foldLeft((PersonalRecords.empty, Vector.empty[File])) {
-          case ((previousPersonalRecords, previousImages), run) =>
-            val personalRecords = previousPersonalRecords.merge(PersonalRecords.fromRun(run))
+      case Seq("history") =>
+        val plotConfig = PacePerDistancePersonalRecordsPlot.Config(
+          plotMinTime = 3.minutes + 30.seconds,       // TODO auto discover this
+          plotMaxTime = Some(8.minutes + 30.seconds), // TODO auto discover this
+          plotMinDistance = 500,
+          plotMaxDistanceOpt = Some(runs.stats.maxDistance),
+        )
 
-            val plot = PacePerDistancePersonalRecordsPlot.fromPersonalRecord(
-              personalRecords,
-              plotMinTime = 2.minutes,
-              plotMaxTime = Some(8.minutes),
-              plotMinDistance = 500,
-              plotMaxDistance = Some(runs.stats.get.maxDistance),
-            )
+        val (_, imagesWithRuns) =
+          runs.map(_.personalRecords).foldLeft((PersonalRecords.empty, Vector.empty[File])) {
+            case ((previousPersonalRecords, previousImages), runPr) =>
+              val plot = PacePerDistancePersonalRecordsPlot.fromMultiplePersonalRecords(
+                Set(previousPersonalRecords, runPr),
+                plotConfig
+              )
 
-            (personalRecords, previousImages :+ plot.createPNGImage())
+              val personalRecords = previousPersonalRecords merge runPr
+
+              val frames = Seq(
+                plot.createPNGImage(),
+                PacePerDistancePersonalRecordsPlot.fromPersonalRecords(personalRecords, plotConfig).createPNGImage()
+              )
+
+            (personalRecords, previousImages ++ frames)
         }
+
+        val images = imagesWithRuns
+            .drop(1) // The first two frames will are the same.
 
         Gif.createGif(
           new File("/tmp/orium/runs/animated.gif"),
           images,
-          delay = 250.milliseconds,
+          delay = 500.milliseconds,
           loop = false
         )
 
         images.foreach(_.delete())
-      case "show" =>
+      case Seq("show") =>
         val plot = PacePerDistancePersonalRecordsPlot.fromRuns(runs)
 
         // plot.createPNGImage(new File("/tmp/orium/p.png"))
 
         plot.showPlot()
-      case "upload" =>
+      case Seq("show", n) =>
+        val plot = PacePerDistancePersonalRecordsPlot.fromMultiplePersonalRecordsAndRun(
+          runs.personalRecords,
+          runs.toIndexedSeq(n.toInt - 1)
+        )
+
+        // plot.createPNGImage(new File("/tmp/orium/p.png"))
+
+        plot.showPlot()
+      case Seq("upload") =>
         config.imgurClientId match {
           case Some(clientId) =>
             val plot = PacePerDistancePersonalRecordsPlot.fromRuns(runs)
@@ -198,7 +219,7 @@ object Main {
           case None =>
             println("No imgur client id defined.")
         }
-      case "table" =>
+      case Seq("table") =>
         outputPersonalRecords(runs.personalRecords, config.prDistances, config.showNBest)
       case _ =>
     }

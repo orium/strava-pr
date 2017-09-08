@@ -23,7 +23,7 @@ case class DataFileContent(alias: String, rows: Seq[String])
 trait Plot {
   private def createImageGnuplotHeader(imageFilename: File): Seq[String] =
     Seq(
-      "set terminal png size 1920,1080", // TODO resolution by configuration.
+      "set terminal pngcairo size 1920,1080", // TODO resolution by configuration.
       s"set output '$imageFilename'"
     )
 
@@ -50,7 +50,7 @@ trait Plot {
 
   private def createGnuplotFile(plotType: Plot.Type): File = {
     val aliasFileMap: Map[String, File] = data.map { case DataFileContent(alias, rows) =>
-      alias -> dumpToTempFile(rows, s"strava-pr-plot-data-$alias", ".dat")
+      alias -> dumpToTempFile(rows, s"strava-pr-plot-data-$alias-", ".dat")
     }.toMap
 
     val scriptBody = gnuplotScript(aliasFileMap)
@@ -64,7 +64,7 @@ trait Plot {
         scriptBody ++ pauseForEnterTail
     }
 
-    dumpToTempFile(completeScript, "strava-pr-plot", ".gnuplot")
+    dumpToTempFile(completeScript, "strava-pr-plot-", ".gnuplot")
   }
 
   def createPNGImage(imageFilename: File): Unit = {
@@ -73,7 +73,7 @@ trait Plot {
   }
 
   def createPNGImage(): File = {
-    val pngFile = File.createTempFile("strava-pr", ".png")
+    val pngFile = File.createTempFile("strava-pr-", ".png")
     createPNGImage(pngFile)
     pngFile
   }

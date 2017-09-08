@@ -123,16 +123,10 @@ class Runs private (runs: Seq[Run]) extends Traversable[Run] {
   def dropAfter(dateTime: LocalDateTime): Runs =
     new Runs(runs.takeWhile(_.datetime.compareTo(dateTime) <= 0))
 
-  def stats: Option[Runs.Stats] =
-    if (runs.isEmpty) {
-      None
-    } else {
-      Some {
-        Runs.Stats(
-          maxDistance = runs.map(_.totalDistance).max
-        )
-      }
-    }
+  def stats: Runs.Stats =
+    Runs.Stats(
+      maxDistance = runs.map(_.totalDistance).foldLeft(0)(_ max _)
+    )
 
   def timeSpan: Option[TimeSpan] = for {
     first <- runs.headOption
