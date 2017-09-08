@@ -27,7 +27,6 @@ case class Config(
   accessToken: String,
   imgurClientId: Option[String],
   showNBest: Int,
-  onlyBestOfEachRun: Boolean,
   prDistances: Seq[Int]
 )
 
@@ -38,7 +37,6 @@ object Config {
        |# imgur-client-id = "put a client here"
        |
        |show-n-best = 5
-       |only-best-of-each-run = true
        |
        |pr-distances = [
        |  1000,
@@ -68,9 +66,8 @@ object Config {
     val authToken     = c.getString("auth-token")
     val imgurClientId = if (c.hasPath("imgur-client-id")) Some(c.getString("imgur-client-id")) else None
     val showNBest     = c.getInt("show-n-best")
-    val onlyBestOfEachRun = c.getBoolean("only-best-of-each-run")
     val prDistances   = c.getNumberList("pr-distances").asScala.map(_.intValue())
 
-    Config(authToken, imgurClientId, showNBest, onlyBestOfEachRun, prDistances)
+    Config(authToken, imgurClientId, showNBest, prDistances)
   }
 }

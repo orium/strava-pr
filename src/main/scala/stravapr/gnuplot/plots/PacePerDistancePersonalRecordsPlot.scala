@@ -19,7 +19,7 @@ package stravapr.gnuplot.plots
 import java.io.File
 
 import stravapr.Utils.RichDuration
-import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot.DefaultStartDistance
+import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot.fromTo
 import stravapr.gnuplot.{DataFileContent, Plot}
 import stravapr.{PersonalRecords, Runs}
 
@@ -29,15 +29,16 @@ class PacePerDistancePersonalRecordsPlot private (
   personalRecords: PersonalRecords,
   plotMinTime: Duration = 2.minutes,
   plotMaxTime: Option[Duration] = None,
-  plotMinDistance: Int = DefaultStartDistance,
-  plotMaxDistance: Option[Int] = None,
+  plotMinDistance: Int = PacePerDistancePersonalRecordsPlot.DefaultStartDistance,
+  plotMaxDistance: Int,
+  distanceStep: Int = PacePerDistancePersonalRecordsPlot.DefaultDistanceStep
 ) extends Plot {
   override protected def gnuplotScript(dataFiles: Map[String, File]): Seq[String] =
-    s"""set title "Best Pace by distance"
+    s"""set title "Pace by distance for personal records"
        |
        |set nokey
        |
-       |set ylabel "best pace (m:s/km)"
+       |set ylabel "pace (m:s/km)"
        |set xlabel "distance (m)"
        |
        |set grid ytics xtics
@@ -48,7 +49,7 @@ class PacePerDistancePersonalRecordsPlot private (
        |set ytics  15
        |set xtics 500
        |
-       |set xrange [$plotMinDistance:${plotMaxDistance.getOrElse("")}]
+       |set xrange [$plotMinDistance:$plotMaxDistance]
        |set yrange [${plotMinTime.toSeconds}:${plotMaxTime.map(_.toSeconds).getOrElse("")}]
        |set offset graph 0, graph 0, graph .1, graph 0
        |
@@ -79,11 +80,10 @@ class PacePerDistancePersonalRecordsPlot private (
 
   private def dataRows: Seq[String] = {
     val header = "# distance      time       pace      pace secs     date     color"
+    val distances = fromTo(plotMinDistance, plotMaxDistance, distanceStep)
 
-    val data = personalRecords.distances flatMap { distance =>
-      val bestTimes = personalRecords.bestTimes(distance)
-
-      bestTimes.headOption.map { bestTime =>
+    val data = distances flatMap { distance =>
+      personalRecords.bestTime(distance) map { bestTime =>
         val duration = bestTime.duration.formatHMS().filterNot(_.isSpaceChar)
         val date     = bestTime.run.date
         val pace     = bestTime.pace
@@ -106,31 +106,47 @@ class PacePerDistancePersonalRecordsPlot private (
 }
 
 object PacePerDistancePersonalRecordsPlot {
-  // Start at 200 meters since it is unlikely that we have accurate GPS information for such short distances.
-  private val DefaultStartDistance: Int = 500
+  // Start at 100 meters since it is unlikely that we have accurate GPS information for such short distances.
+  private val DefaultStartDistance: Int = 100
   private val DefaultDistanceStep: Int = 25
 
   private def fromTo(start: Int, end: Int, step: Int = 1): Seq[Int] =
     Stream.iterate(start)(_ + step).takeWhile(_ <= end)
 
-  def apply(
+  def fromRuns(
     runs: Runs,
     plotMinTime: Duration = 2.minutes,
     plotMaxTime: Option[Duration] = None,
     plotMinDistance: Int = DefaultStartDistance,
     plotMaxDistance: Option[Int] = None,
     distanceStep: Int = DefaultDistanceStep
+  ): PacePerDistancePersonalRecordsPlot =
+    fromPersonalRecord(
+      PersonalRecords.fromRuns(runs),
+      plotMinTime,
+      plotMaxTime,
+      plotMinDistance,
+      plotMaxDistance,
+      distanceStep
+    )
+
+  def fromPersonalRecord(
+    personalRecords: PersonalRecords,
+    plotMinTime: Duration = 2.minutes,
+    plotMaxTime: Option[Duration] = None,
+    plotMinDistance: Int = DefaultStartDistance,
+    plotMaxDistance: Option[Int] = None,
+    distanceStep: Int = DefaultDistanceStep
   ): PacePerDistancePersonalRecordsPlot = {
-    val maxDistance = runs.stats.get.maxDistance
-    val distances = fromTo(plotMinDistance, maxDistance, distanceStep)
-    val personalRecords = PersonalRecords.fromRuns(runs, distances, showNBest = 1)
+    val maxDistance = personalRecords.runs.stats.get.maxDistance
 
     new PacePerDistancePersonalRecordsPlot(
       personalRecords,
       plotMinTime,
       plotMaxTime,
       plotMinDistance,
-      plotMaxDistance.orElse(Some(maxDistance)),
+      plotMaxDistance.getOrElse(maxDistance),
+      distanceStep
     )
   }
 }

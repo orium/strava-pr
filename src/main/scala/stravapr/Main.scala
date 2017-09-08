@@ -52,10 +52,10 @@ object RateLimiter {
 }
 
 object Main {
-  private def outputPersonalRecords(personalRecords: PersonalRecords): Unit = {
+  private def outputPersonalRecords(personalRecords: PersonalRecords, distances: Seq[Int], showNBest: Int): Unit = {
     var first = true
 
-    personalRecords.distances foreach { distance =>
+    distances foreach { distance =>
       val bestTimes = personalRecords.bestTimes(distance)
 
       if (bestTimes.nonEmpty) {
@@ -65,9 +65,9 @@ object Main {
 
         println(s"Best $distance meters")
         println()
-        println("         time            date        pace        start at (m)   total run dist (m)   url")
+        println("         time            date         pace       start at (m)   total run dist (m)   url")
 
-        bestTimes foreach { distanceDuration: RunSlice =>
+        bestTimes.take(showNBest) foreach { distanceDuration: RunSlice =>
           val run = distanceDuration.run
           val formatedDuration = distanceDuration.duration.formatHMS()
           val url = s"https://www.strava.com/activities/${run.id}"
@@ -152,22 +152,20 @@ object Main {
 
         fetchRuns(client)
       case "history" =>
-        val images = runs.runHistory map { runsSlice =>
-          val plot = PacePerDistancePersonalRecordsPlot(
-            runsSlice,
-            plotMinTime = 2.minutes,
-            plotMaxTime = Some(8.minutes),
-            plotMinDistance = 500,
-            plotMaxDistance = Some(runs.stats.get.maxDistance),
-          )
-          val TimeSpan(start, end) = runsSlice.timeSpan.get
+        val (_, images) = runs
+          .foldLeft((PersonalRecords.empty, Vector.empty[File])) {
+          case ((previousPersonalRecords, previousImages), run) =>
+            val personalRecords = previousPersonalRecords.merge(PersonalRecords.fromRun(run))
 
-          println(s"Runs from $start to $end.")
+            val plot = PacePerDistancePersonalRecordsPlot.fromPersonalRecord(
+              personalRecords,
+              plotMinTime = 2.minutes,
+              plotMaxTime = Some(8.minutes),
+              plotMinDistance = 500,
+              plotMaxDistance = Some(runs.stats.get.maxDistance),
+            )
 
-          val imageFile = new File(s"/tmp/orium/runs/$end.png")
-          plot.createPNGImage(imageFile)
-
-          imageFile
+            (personalRecords, previousImages :+ plot.createPNGImage())
         }
 
         Gif.createGif(
@@ -176,8 +174,10 @@ object Main {
           delay = 250.milliseconds,
           loop = false
         )
+
+        images.foreach(_.delete())
       case "show" =>
-        val plot = PacePerDistancePersonalRecordsPlot(runs)
+        val plot = PacePerDistancePersonalRecordsPlot.fromRuns(runs)
 
         // plot.createPNGImage(new File("/tmp/orium/p.png"))
 
@@ -185,7 +185,7 @@ object Main {
       case "upload" =>
         config.imgurClientId match {
           case Some(clientId) =>
-            val plot = PacePerDistancePersonalRecordsPlot(runs)
+            val plot = PacePerDistancePersonalRecordsPlot.fromRuns(runs)
             val pngFile = plot.createPNGImage()
 
             val imgurUploader = new ImgurUploader(clientId)
@@ -199,9 +199,7 @@ object Main {
             println("No imgur client id defined.")
         }
       case "table" =>
-        val personalRecords = PersonalRecords.fromRuns(runs, config.prDistances, config.showNBest, config.onlyBestOfEachRun)
-
-        outputPersonalRecords(personalRecords)
+        outputPersonalRecords(runs.personalRecords, config.prDistances, config.showNBest)
       case _ =>
     }
   }

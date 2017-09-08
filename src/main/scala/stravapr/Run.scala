@@ -18,7 +18,6 @@ package stravapr
 
 import java.time.format.DateTimeFormatter
 import java.time.{LocalDate, LocalDateTime, ZoneOffset}
-import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
 import kiambogo.scrava.ScravaClient
@@ -59,14 +58,12 @@ object RunSlice {
   }
 }
 
-class Run(
-  val id: Int,
-  val datetime: LocalDateTime,
-  val times: Array[Int],
-  val distances: Array[Int]
+case class Run(
+  id: Int,
+  datetime: LocalDateTime,
+  times: Seq[Int],
+  distances: Seq[Int]
 ) {
-  import RunSlice.DistanceDurationIsOrdered
-
   require(distances.head == 0, "First distance must be zero")
 
   def date: LocalDate = datetime.toLocalDate
@@ -80,7 +77,7 @@ class Run(
 
   private lazy val timeAtDistance: Array[Duration] = {
     val t = 0 +:
-      (distances zip times).sliding(2).flatMap { case Array((distanceBefore, timeBefore), (distanceAfter, timeAfter)) =>
+      (distances zip times).toArray.sliding(2).flatMap { case Array((distanceBefore, timeBefore), (distanceAfter, timeAfter)) =>
         ((distanceBefore + 1) to distanceAfter) map { distance =>
           interpolate(distanceBefore, timeBefore, distanceAfter, timeAfter, distance)
         }
@@ -95,21 +92,15 @@ class Run(
   // TODO Run.Stats
   def totalDistance: Int = distances.last
 
-  private def allTimesForDistance(distance: Int): Seq[RunSlice] = {
+  def personalRecords: PersonalRecords = PersonalRecords.fromRuns(Runs(this))
+
+  def runSlices(distance: Int): Seq[RunSlice] = {
     (0 to (totalDistance - distance)).map { startDistance =>
       val time = timeAt(startDistance + distance).get - timeAt(startDistance).get
 
       RunSlice(distance, startDistance, time, this)
     }
   }
-
-  def bestTimes(distance: Int): Seq[RunSlice] = {
-    // We ignore repeated times in the same run.
-    allTimesForDistance(distance).groupBy(_.duration).values.map(_.min).toSeq.sorted
-  }
-
-  def bestTime(distance: Int): Option[RunSlice] =
-    bestTimes(distance).headOption
 }
 
 object Run {
@@ -128,36 +119,43 @@ object Run {
 case class TimeSpan(start: LocalDateTime, end: LocalDateTime)
 
 /** Collection of runs.  This is always sorted chronologically. */
-class Runs private (runSet: Seq[Run]) extends Traversable[Run] {
+class Runs private (runs: Seq[Run]) extends Traversable[Run] {
   def dropAfter(dateTime: LocalDateTime): Runs =
-    new Runs(runSet.takeWhile(_.datetime.compareTo(dateTime) <= 0))
+    new Runs(runs.takeWhile(_.datetime.compareTo(dateTime) <= 0))
 
   def stats: Option[Runs.Stats] =
-    if (runSet.isEmpty) {
+    if (runs.isEmpty) {
       None
     } else {
       Some {
         Runs.Stats(
-          maxDistance = runSet.map(_.totalDistance).max
+          maxDistance = runs.map(_.totalDistance).max
         )
       }
     }
 
   def timeSpan: Option[TimeSpan] = for {
-    first <- runSet.headOption
-    last  <- runSet.lastOption
+    first <- runs.headOption
+    last  <- runs.lastOption
   } yield TimeSpan(first.datetime, last.datetime)
 
   def runHistory: Seq[Runs] =
-    runSet.inits.map(new Runs(_)).toSeq.reverse
+    runs.inits.map(new Runs(_)).toSeq.reverse
       .drop(1) // Drop empty
 
+  def personalRecords: PersonalRecords = PersonalRecords.fromRuns(this)
+
+  def merge(other: Runs): Runs =
+    Runs(runs.toSet ++ other.toSet)
+
   override def foreach[U](f: (Run) => U): Unit =
-    runSet.foreach(f)
+    runs.foreach(f)
 }
 
 object Runs {
-  val empty: Runs = apply(Set.empty)
+  val empty: Runs = apply(Set.empty[Run])
+
+  def apply(run: Run): Runs = apply(Set(run))
 
   def apply(runSet: Set[Run]): Runs =
     new Runs(runSet.toSeq.sortBy(_.datetime.toEpochSecond(ZoneOffset.UTC)))
