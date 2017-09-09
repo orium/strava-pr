@@ -16,7 +16,6 @@
 
 package stravapr
 
-
 import java.io._
 import java.net.{HttpURLConnection, URL}
 import java.nio.file.Files
@@ -44,8 +43,19 @@ class ImgurUploader(clientId: String) {
     Files.copy(imageFilename.toPath, writer)
     writer.close()
 
+    connection.getResponseCode match {
+      case 200 => // OK
+      case 429 => throw ImgurUploader.RateLimitingExceeded
+      case e   => throw ImgurUploader.HTTPException(e)
+    }
+
     val photoURL = (Json.parse(connection.getInputStream) \ "data" \ "link").get.as[String]
 
     new URL(photoURL)
   }
+}
+
+object ImgurUploader {
+  case object RateLimitingExceeded extends Exception
+  case class HTTPException(status: Int) extends Exception
 }

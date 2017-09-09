@@ -43,8 +43,8 @@ class RunCache private (cache: MutableMap[Int, Run]) {
           "version"   -> RunCache.RunFormatVersion,
           "id"        -> run.id,
           "datetime"  -> run.datetime.toString,
-          "times"     -> run.times.toSeq.asJava,
-          "distances" -> run.distances.toSeq.asJava
+          "times"     -> run.times.asJava,
+          "distances" -> run.distances.asJava
         ).asJava
       )
     }.map(ConfigValueFactory.fromAnyRef(_))
@@ -74,17 +74,20 @@ object RunCache {
     val config: TypesafeConfig = ConfigFactory.parseFile(cacheFile)
     val runs: Seq[TypesafeConfig] = config.getConfigList("runs").asScala
 
-    val cache = runs.map { run =>
+    val cache = runs.flatMap { run =>
       val version = run.getInt("version")
 
-      assume(version == RunFormatVersion, "Unknown run format version in run cache")
+      if (version == RunFormatVersion) {
+        val id = run.getInt("id")
+        val datetime = LocalDateTime.parse(run.getString("datetime"), DateTimeFormatter.ISO_DATE_TIME)
+        val times = run.getIntList("times").asScala.map(_.toInt).toArray
+        val distances = run.getIntList("distances").asScala.map(_.toInt).toArray
 
-      val id        = run.getInt("id")
-      val datetime  = LocalDateTime.parse(run.getString("datetime"), DateTimeFormatter.ISO_DATE_TIME)
-      val times     = run.getIntList("times").asScala.map(_.toInt).toArray
-      val distances = run.getIntList("distances").asScala.map(_.toInt).toArray
-
-      id -> new Run(id, datetime, times, distances)
+        Some(id -> Run(id, datetime, times, distances))
+      } else {
+        println("Ignoring unknown run format version in run cache.")
+        None
+      }
     }
 
     new RunCache(MutableMap(cache: _*))

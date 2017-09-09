@@ -16,21 +16,29 @@
 
 package stravapr
 
-import scala.concurrent.duration.Duration
+import java.time.{LocalDate, LocalDateTime, LocalTime}
 
-object Utils {
-  implicit class RichDuration(val duration: Duration) extends AnyVal {
-    def formatHMS: String = {
-      val s = duration.toSeconds % 60
-      val m = duration.toSeconds / 60 % 60
-      val h = duration.toSeconds / 60 / 60
+import scala.util.Random
+import stravapr.Utils.fromTo
 
-      f"$h h $m%02d m $s%02d s"
-    }
+object RunTestUtils {
+  def dummyRuns(distance: Int): Run = {
+    val distances = fromTo(0, distance, step = 4)
+    val datetime = LocalDateTime.of(
+      LocalDate.of(2000 + Random.nextInt(10), 1 + Random.nextInt(12), 1 + Random.nextInt(25)),
+      LocalTime.of(4, 20, 0)
+    )
+    val times = Seq.iterate(0, distances.size)(_ + Random.nextInt(5))
+
+    Run(
+      id = Random.nextInt(Int.MaxValue),
+      datetime,
+      times,
+      distances
+    )
   }
 
-  def fromTo(start: Int, end: Int, step: Int = 1): Array[Int] =
-    Stream.iterate(start)(_ + step).takeWhile(_ <= end)
-      // We return an array since it is super fast to iterate through and this matters in some places where this is used.
-      .toArray
+  def dummyRuns(n: Int, distance: Int): Runs = {
+    Runs(Seq.fill(n)(dummyRuns(distance)).toSet)
+  }
 }

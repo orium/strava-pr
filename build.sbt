@@ -1,5 +1,5 @@
 val ProjectName  = "strava-pr"
-val Version      = "0.0.0-SNAPSHOT"
+val Version      = "0.1.0-SNAPSHOT"
 val ScalaVersion = "2.12.3"
 
 lazy val stravaPR = (project in file("."))
@@ -14,7 +14,9 @@ lazy val stravaPRSettings = Seq(
     Dependency.Scrava,
     Dependency.TypesafeConfig,
     Dependency.PlayJson,
-    Dependency.Scrimage
+    Dependency.Scrimage,
+
+    Dependency.ScalaTest
   )
 )
 

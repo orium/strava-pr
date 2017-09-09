@@ -16,12 +16,8 @@
 
 package stravapr
 
-import java.time.format.DateTimeFormatter
 import java.time.{LocalDate, LocalDateTime, ZoneOffset}
 import java.util.concurrent.TimeUnit
-
-import kiambogo.scrava.ScravaClient
-import kiambogo.scrava.models.{PersonalDetailedActivity, Streams}
 
 import scala.concurrent.duration.Duration
 
@@ -92,7 +88,7 @@ case class Run(
   // TODO Run.Stats
   def totalDistance: Int = distances.last
 
-  def personalRecords: PersonalRecords = PersonalRecords.fromRuns(Runs(this))
+  def records: Records = Records.fromRuns(Runs(this))
 
   def runSlices(distance: Int): Seq[RunSlice] = {
     (0 to (totalDistance - distance)).map { startDistance =>
@@ -103,23 +99,15 @@ case class Run(
   }
 }
 
-object Run {
-  def fetch(client: ScravaClient, activity: PersonalDetailedActivity): Run = {
-    val timeDistance: Seq[Streams] = RateLimiter {
-      client.retrieveActivityStream(activity.id.toString, Some("time,distance"))
-    }
-    val times     = timeDistance(0).data.map(_.asInstanceOf[Int]).toArray
-    val distances = timeDistance(1).data.map(_.asInstanceOf[Float].round).toArray
-    val datetime  = LocalDateTime.parse(activity.start_date, DateTimeFormatter.ISO_DATE_TIME)
-
-    new Run(activity.id, datetime, times, distances)
-  }
-}
-
 case class TimeSpan(start: LocalDateTime, end: LocalDateTime)
 
 /** Collection of runs.  This is always sorted chronologically. */
 class Runs private (runs: Seq[Run]) extends Traversable[Run] {
+  lazy val runMap: Map[Int, Run] = runs.map(r => r.id -> r).toMap
+
+  def get(runId: Int): Option[Run] =
+    runMap.get(runId)
+
   def dropAfter(dateTime: LocalDateTime): Runs =
     new Runs(runs.takeWhile(_.datetime.compareTo(dateTime) <= 0))
 
@@ -133,11 +121,9 @@ class Runs private (runs: Seq[Run]) extends Traversable[Run] {
     last  <- runs.lastOption
   } yield TimeSpan(first.datetime, last.datetime)
 
-  def runHistory: Seq[Runs] =
-    runs.inits.map(new Runs(_)).toSeq.reverse
-      .drop(1) // Drop empty
+  def runHistory: RunHistory = new RunHistory(this)
 
-  def personalRecords: PersonalRecords = PersonalRecords.fromRuns(this)
+  def personalRecords: Records = Records.fromRuns(this)
 
   def merge(other: Runs): Runs =
     Runs(runs.toSet ++ other.toSet)
@@ -156,5 +142,38 @@ object Runs {
 
   case class Stats(
     maxDistance: Int
+  )
+}
+
+class RunHistory(runs: Runs) {
+  def runHistory: Seq[Runs] =
+    runs.inits.map(runs => Runs(runs.toSet)).toSeq.reverse
+      .drop(1) // Drop empty
+
+  def personalRecordsHistory: Seq[RunHistory.PersonalRecordsAtRun] = {
+    // We use personal record merge here since it will re-use results from runs subsets thus avoiding extra computation.
+    runs.foldLeft(Vector.empty[RunHistory.PersonalRecordsAtRun]) { case (personalRecordsList, run) =>
+      val previousPersonalRecords: Records = personalRecordsList.lastOption.map(_.personalRecords).getOrElse(Records.empty)
+      val runRecords = run.records
+      val personalRecords: Records = previousPersonalRecords merge runRecords
+
+      val personalRecordsAtRun = RunHistory.PersonalRecordsAtRun(
+        run,
+        runRecords,
+        previousPersonalRecords,
+        personalRecords
+      )
+
+      personalRecordsList :+ personalRecordsAtRun
+    }
+  }
+}
+
+object RunHistory {
+  case class PersonalRecordsAtRun(
+    run: Run,
+    runRecords: Records,
+    previousPersonalRecords: Records,
+    personalRecords: Records
   )
 }

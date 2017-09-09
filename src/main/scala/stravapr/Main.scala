@@ -17,42 +17,52 @@
 package stravapr
 
 import java.io.{File, PrintWriter}
+import java.net.URL
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
-import kiambogo.scrava.ScravaClient
-import kiambogo.scrava.models.{PersonalDetailedActivity, RateLimitException}
+import kiambogo.scrava.{Client, ScravaClient}
+import kiambogo.scrava.models._
+import net.liftweb.json.DefaultFormats
 import stravapr.Utils.RichDuration
 import stravapr.animation.Gif
 import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot
 
 import scala.concurrent.duration._
-import scala.util.Properties
+import scala.util.{Failure, Properties, Success, Try}
+import scalaj.http.Http
 
-object RateLimiter {
-  private var backoff: Duration = 0.seconds
-
-  def apply[T](f: => T): T = try {
-    val r = f
-
-    backoff = 0.seconds
-
-    r
+class RateLimiter(isRateLimitExceeded: Exception => Boolean) {
+  private def run[T](f: => T, backoff: Duration = 1.minute): T = try {
+    f
   } catch {
-    case _: RateLimitException =>
-      if (backoff == 0.seconds) {
-        backoff = 1.minute
-      }
-
-      backoff = backoff * 2.0
-
+    case e: Exception if isRateLimitExceeded(e) =>
       println(s"Rate limit exceeded.  Sleeping for $backoff...")
+
       Thread.sleep(backoff.toMillis)
 
-      apply(f)
+      run(f, backoff * 2)
   }
+
+  RateLimitException.getClass
+
+  def apply[T](f: => T): T =
+    run(f)
 }
 
 object Main {
-  private def outputPersonalRecords(personalRecords: PersonalRecords, distances: Seq[Int], showNBest: Int): Unit = {
+  private val ConfigDir:  File = new File(new File(Properties.userHome, ".config"), "strava-pr")
+  private val ConfigFile: File = new File(ConfigDir, "strava-pr.conf")
+  private val CacheFile:  File = new File(ConfigDir, "cache")
+
+  private val GnuplotDir:        File = new File("gnuplot")
+  private val PlotPrGnuplotFile: File = new File(GnuplotDir, "plot-pr-pace.gnuplot")
+  private val PlotPrDataFile:    File = new File(GnuplotDir, "plot-pr-pace.dat")
+
+  private val stravaRateLimiter: RateLimiter = new RateLimiter(_.isInstanceOf[RateLimitException])
+  private val imgurRateLimiter: RateLimiter = new RateLimiter(_.isInstanceOf[ImgurUploader.RateLimitingExceeded.type])
+
+  private def outputPersonalRecords(personalRecords: Records, distances: Seq[Int], showNBest: Int): Unit = {
     var first = true
 
     distances foreach { distance =>
@@ -69,7 +79,7 @@ object Main {
 
         bestTimes.take(showNBest) foreach { distanceDuration: RunSlice =>
           val run = distanceDuration.run
-          val formatedDuration = distanceDuration.duration.formatHMS()
+          val formatedDuration = distanceDuration.duration.formatHMS
           val url = s"https://www.strava.com/activities/${run.id}"
           val runDist = run.totalDistance
           val pace = distanceDuration.pace
@@ -81,14 +91,6 @@ object Main {
       }
     }
   }
-
-  private val ConfigDir:  File = new File(new File(Properties.userHome, ".config"), "strava-pr")
-  private val ConfigFile: File = new File(ConfigDir, "strava-pr.conf")
-  private val CacheFile:  File = new File(ConfigDir, "cache")
-
-  private val GnuplotDir:        File = new File("gnuplot")
-  private val PlotPrGnuplotFile: File = new File(GnuplotDir, "plot-pr-pace.gnuplot")
-  private val PlotPrDataFile:    File = new File(GnuplotDir, "plot-pr-pace.dat")
 
   private def isSetupDone(): Boolean =
     ConfigFile.exists()
@@ -103,21 +105,44 @@ object Main {
     }
   }
 
-  private def fetchRuns(client: ScravaClient): Unit = {
+  private def fetchStravaRunActivities(client: ScravaClient, ids: Set[Int]): Set[PersonalDetailedActivity] =
+    ids.flatMap { id =>
+      Some(stravaRateLimiter(client.retrieveActivity(id)))
+        .collect {
+          case personalActivity: PersonalDetailedActivity => personalActivity
+        }.filter(_.`type` == "Run")
+    }
+
+  private def fetchStravaRunActivities(client: ScravaClient): Set[PersonalDetailedActivity] = {
+    val runIds = stravaRateLimiter(client.listAthleteActivities(retrieveAll = true)).map(_.id).toSet
+
+    fetchStravaRunActivities(client, runIds)
+  }
+
+  private def activityToRun(client: ScravaClient, activity: PersonalDetailedActivity): Run = {
+    val timeDistance: Seq[Streams] = stravaRateLimiter {
+      client.retrieveActivityStream(activity.id.toString, Some("time,distance"))
+    }
+    val times     = timeDistance(0).data.map(_.asInstanceOf[Int]).toArray
+    val distances = timeDistance(1).data.map(_.asInstanceOf[Float].round).toArray
+    val datetime  = LocalDateTime.parse(activity.start_date, DateTimeFormatter.ISO_DATE_TIME)
+
+    Run(activity.id, datetime, times, distances)
+  }
+
+  private def fetchRuns(client: ScravaClient): Runs = {
     val runCache: RunCache = if (CacheFile.exists()) RunCache.fromFile(CacheFile).get else RunCache.empty
     val initialCacheSize = runCache.size
 
     val runs = Runs {
-      RateLimiter(client.listAthleteActivities(retrieveAll = true)).flatMap { activitySummary =>
-        runCache.get(activitySummary.id).orElse {
-          Some(RateLimiter(client.retrieveActivity(activitySummary.id)))
-            .collect {
-              case personalActivity: PersonalDetailedActivity => personalActivity
-            }.filter(_.`type` == "Run")
-            .map(activity => Run.fetch(client, activity))
-        }
-      }.toSet
-    }
+      stravaRateLimiter(client.listAthleteActivities(retrieveAll = true))
+        .map(_.id)
+        .flatMap { id =>
+          runCache.get(id).orElse {
+            fetchStravaRunActivities(client, Set(id)).map(activity => activityToRun(client, activity)).headOption
+          }
+        }.toSet
+      }
 
     // Populate and save cache.
     runCache.add(runs)
@@ -125,9 +150,11 @@ object Main {
 
     println(s"Fetched ${runCache.size - initialCacheSize} new runs.")
     println(s"You have now a total of ${runs.size} runs.")
+
+    runs
   }
 
-  private def allRuns(): Runs = {
+  private def cachedRuns(): Runs = {
     val runCache: RunCache = if (CacheFile.exists()) RunCache.fromFile(CacheFile).get else RunCache.empty
     runCache.allRuns
   }
@@ -144,7 +171,7 @@ object Main {
     }
 
     val config: Config = Config.fromFile(ConfigFile).get
-    val runs: Runs = allRuns()
+    val runs: Runs = cachedRuns()
 
     args.toSeq match {
       case Seq("fetch") =>
@@ -153,31 +180,28 @@ object Main {
         fetchRuns(client)
       case Seq("history") =>
         val plotConfig = PacePerDistancePersonalRecordsPlot.Config(
-          plotMinTime = 3.minutes + 30.seconds,       // TODO auto discover this
+          plotMinTime = Some(3.minutes + 30.seconds), // TODO auto discover this
           plotMaxTime = Some(8.minutes + 30.seconds), // TODO auto discover this
           plotMinDistance = 500,
           plotMaxDistanceOpt = Some(runs.stats.maxDistance),
         )
 
-        val (_, imagesWithRuns) =
-          runs.map(_.personalRecords).foldLeft((PersonalRecords.empty, Vector.empty[File])) {
-            case ((previousPersonalRecords, previousImages), runPr) =>
-              val plot = PacePerDistancePersonalRecordsPlot.fromMultiplePersonalRecords(
-                Set(previousPersonalRecords, runPr),
-                plotConfig
-              )
+        val allImages = runs.runHistory.personalRecordsHistory
+          .flatMap { case RunHistory.PersonalRecordsAtRun(_, runRecords, previousPersonalRecords, personalRecords) =>
+            val prAndRacePlot = PacePerDistancePersonalRecordsPlot.fromMultiplePersonalRecords(
+              Set(previousPersonalRecords, runRecords),
+              plotConfig
+            )
 
-              val personalRecords = previousPersonalRecords merge runPr
+            val frames = Seq(
+              prAndRacePlot.createPNGImage(),
+              PacePerDistancePersonalRecordsPlot.fromPersonalRecords(personalRecords, plotConfig).createPNGImage()
+            )
 
-              val frames = Seq(
-                plot.createPNGImage(),
-                PacePerDistancePersonalRecordsPlot.fromPersonalRecords(personalRecords, plotConfig).createPNGImage()
-              )
+            frames
+          }
 
-            (personalRecords, previousImages ++ frames)
-        }
-
-        val images = imagesWithRuns
+        val images = allImages
             .drop(1) // The first two frames will are the same.
 
         Gif.createGif(
@@ -191,7 +215,7 @@ object Main {
       case Seq("show") =>
         val plot = PacePerDistancePersonalRecordsPlot.fromRuns(runs)
 
-        // plot.createPNGImage(new File("/tmp/orium/p.png"))
+        // plot.createPNGImage(new File("/tmp/orium/runs/p.png"))
 
         plot.showPlot()
       case Seq("show", n) =>
@@ -211,11 +235,82 @@ object Main {
 
             val imgurUploader = new ImgurUploader(clientId)
 
-            val url = imgurUploader.upload(pngFile).get
+            val url = imgurRateLimiter(imgurUploader.upload(pngFile).get)
 
             pngFile.delete()
 
             println(s"url: $url")
+          case None =>
+            println("No imgur client id defined.")
+        }
+      case Seq("strava-add-history") => // TODO option to force recompute
+        config.imgurClientId match {
+          case Some(clientId) =>
+            val client: ScravaClient = new ScravaClient(config.accessToken)
+            val imgurUploader: ImgurUploader = new ImgurUploader(config.imgurClientId.get)
+
+            val runActivityMap: Map[Run, PersonalDetailedActivity] = {
+              val allRunActivities = fetchStravaRunActivities(client)
+
+              allRunActivities.map { activity =>
+                runs.get(activity.id) match {
+                  case Some(run) => run -> activity
+                  case None => // Cache miss, got to fetch it fully.
+                    activityToRun(client, activity) -> activity
+                }
+              }.toMap
+            }
+
+            val allRuns = Runs(runActivityMap.keySet)
+
+            allRuns.runHistory.personalRecordsHistory
+              .foreach { case RunHistory.PersonalRecordsAtRun(run, runRecords, previousPersonalRecords, _) =>
+                val activity = runActivityMap(run)
+                val descriptionLineStart = s"Record pace per distance v"
+                val descriptionLine = s"$descriptionLineStart${PacePerDistancePersonalRecordsPlot.Version}: "
+                val description: Option[Seq[String]] = activity.description.map(_.lines.toSeq)
+                    .filter(_.nonEmpty)
+                val alreadyHasPlot: Boolean = description.getOrElse(Seq.empty).exists(_.startsWith(descriptionLine))
+
+                if (!alreadyHasPlot) {
+                  val prAndRacePlot = PacePerDistancePersonalRecordsPlot.fromMultiplePersonalRecords(
+                    Set(previousPersonalRecords, runRecords)
+                  )
+
+                  val imageUrl: URL = imgurRateLimiter(imgurUploader.upload(prAndRacePlot.createPNGImage()).get)
+
+                  val newDescription = description match {
+                    case Some(lines) =>
+                      val linesWithoutPacePerDistance = lines.filterNot(_.startsWith(descriptionLineStart))
+
+                      linesWithoutPacePerDistance ++ Seq("", s"$descriptionLine$imageUrl")
+                    case None => Seq(s"$descriptionLine$imageUrl")
+                  }
+
+                  try {
+                    client.updateActivity(
+                      activity.id,
+                      description = Some(newDescription.mkString("\n"))
+                    )
+                  } catch {
+                    case e: Exception =>
+                      // Unfortunately scrava doesn't tell us the error reason, but a likely scenario is that we do not
+                      // have write permission.
+
+                      // TODO add better error handling to scrava
+
+                      println(
+                        s"Failed to update activity ${activity.id} of ${activity.start_date}.  " +
+                          "Maybe we do not have write permission?\n\n" +
+                          "See here how to obtain an access token with write permission: " +
+                          "http://yizeng.me/2017/01/11/get-a-strava-api-access-token-with-write-permission/"
+                      )
+                      throw e
+                  }
+
+                  println(s"Added plot to run of ${activity.start_date}.")
+                }
+              }
           case None =>
             println("No imgur client id defined.")
         }

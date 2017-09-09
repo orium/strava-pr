@@ -18,15 +18,15 @@ package stravapr.gnuplot.plots
 
 import java.io.File
 
-import stravapr.Utils.RichDuration
-import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot.{Config, fromTo}
+import stravapr.Utils.{RichDuration, fromTo}
+import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot.Config
 import stravapr.gnuplot.{DataFileContent, Plot}
-import stravapr.{PersonalRecords, Run, Runs}
+import stravapr.{Records, Run, Runs}
 
 import scala.concurrent.duration._
 
 class PacePerDistancePersonalRecordsPlot private (
-  personalRecordsSet: Set[PersonalRecords],
+  recordsSet: Set[Records],
   config: Config
 ) extends Plot {
   override protected def gnuplotScript(dataFiles: Map[String, File]): Seq[String] = {
@@ -46,9 +46,9 @@ class PacePerDistancePersonalRecordsPlot private (
          |set ytics  15
          |set xtics 500
          |
-         |set xrange [${config.plotMinDistance}:${config.plotMaxDistance(personalRecordsSet)}]
-         |set yrange [${config.plotMinTime.toSeconds}:${config.plotMaxTime.map(_.toSeconds).getOrElse("")}]
-         |# set offset graph 0, graph 0, graph .1, graph 0
+         |set xrange [${config.plotMinDistance}:${config.plotMaxDistance(recordsSet)}]
+         |set yrange [${config.plotMinTime.map(_.toSeconds).getOrElse("")}:${config.plotMaxTime.map(_.toSeconds).getOrElse("")}]
+         |set offset graph 0, graph 0, graph .05, graph .05
          |
          |set palette maxcolors 12
          |set palette defined ( \\
@@ -80,13 +80,17 @@ class PacePerDistancePersonalRecordsPlot private (
     preamble ++ plotCmd
   }
 
-  private def dataRows(personalRecords: PersonalRecords): Seq[String] = {
+  private def dataRows(records: Records): Seq[String] = {
     val header = "# distance      time       pace      pace secs     date     color"
-    val distances = fromTo(config.plotMinDistance, config.plotMaxDistance(personalRecordsSet), config.distanceStep)
+    val distances = {
+      fromTo(config.plotMinDistance, config.plotMaxDistance(recordsSet), config.distanceStep) ++
+        // We also add the distances of each run.  This will make the gnuplot line interpolation not do weird things.
+        records.runs.map(_.totalDistance)
+    }.sorted
 
     val data = distances flatMap { distance =>
-      personalRecords.bestTime(distance) map { bestTime =>
-        val duration = bestTime.duration.formatHMS().filterNot(_.isSpaceChar)
+      records.bestTime(distance) map { bestTime =>
+        val duration = bestTime.duration.formatHMS.filterNot(_.isSpaceChar)
         val date     = bestTime.run.date
         val pace     = bestTime.pace
 
@@ -100,7 +104,7 @@ class PacePerDistancePersonalRecordsPlot private (
   }
 
   override protected def data: Set[DataFileContent] = {
-    personalRecordsSet.map(dataRows).zipWithIndex map { case (rows, i) =>
+    recordsSet.map(dataRows).zipWithIndex map { case (rows, i) =>
       DataFileContent(
         alias = s"plot-pr-pace-$i",
         rows = rows
@@ -110,21 +114,20 @@ class PacePerDistancePersonalRecordsPlot private (
 }
 
 object PacePerDistancePersonalRecordsPlot {
+  val Version = 1
+
   // Start at 100 meters since it is unlikely that we have accurate GPS information for such short distances.
   private val DefaultStartDistance: Int = 500
-  private val DefaultDistanceStep: Int = 15
-
-  private def fromTo(start: Int, end: Int, step: Int = 1): Seq[Int] =
-    Stream.iterate(start)(_ + step).takeWhile(_ <= end)
+  private val DefaultDistanceStep: Int = 25
 
   case class Config(
-    plotMinTime: Duration = 2.minutes,
+    plotMinTime: Option[Duration] = None,
     plotMaxTime: Option[Duration] = None,
     plotMinDistance: Int = DefaultStartDistance,
     plotMaxDistanceOpt: Option[Int] = None,
     distanceStep: Int = DefaultDistanceStep
   ) {
-    def plotMaxDistance(personalRecordsSet: Set[PersonalRecords]): Int =
+    def plotMaxDistance(personalRecordsSet: Set[Records]): Int =
       plotMaxDistanceOpt.getOrElse {
         personalRecordsSet.map(_.runs.stats.maxDistance).max
       }
@@ -141,7 +144,7 @@ object PacePerDistancePersonalRecordsPlot {
     fromPersonalRecords(runs.personalRecords, config)
 
   def fromPersonalRecords(
-    personalRecords: PersonalRecords,
+    personalRecords: Records,
     config: Config = Config.Default
   ): PacePerDistancePersonalRecordsPlot =
     fromMultiplePersonalRecords(Set(personalRecords), config)
@@ -153,15 +156,15 @@ object PacePerDistancePersonalRecordsPlot {
     fromMultiplePersonalRecords(runsSet.map(_.personalRecords), config)
 
   def fromMultiplePersonalRecords(
-    personalRecordsSet: Set[PersonalRecords],
+    personalRecordsSet: Set[Records],
     config: Config = Config.Default
   ): PacePerDistancePersonalRecordsPlot =
     new PacePerDistancePersonalRecordsPlot(personalRecordsSet, config)
 
   def fromMultiplePersonalRecordsAndRun(
-    personalRecords: PersonalRecords,
+    personalRecords: Records,
     run: Run,
     config: Config = Config.Default
   ): PacePerDistancePersonalRecordsPlot =
-    fromMultiplePersonalRecords(Set(personalRecords, run.personalRecords), config)
+    fromMultiplePersonalRecords(Set(personalRecords, run.records), config)
 }
