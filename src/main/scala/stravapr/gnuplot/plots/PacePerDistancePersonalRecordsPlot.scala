@@ -20,7 +20,7 @@ import java.io.File
 
 import stravapr.Utils.{RichDuration, fromTo}
 import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot.Config
-import stravapr.gnuplot.{DataFileContent, Plot}
+import stravapr.gnuplot.Plot
 import stravapr.{Records, Run, Runs}
 
 import scala.concurrent.duration._
@@ -43,7 +43,7 @@ class PacePerDistancePersonalRecordsPlot private (
          |set ydata time
          |set timefmt "%s"
          |
-         |set ytics  15
+         |set ytics  10
          |set xtics 500
          |
          |set xrange [${config.plotMinDistance}:${config.plotMaxDistance(recordsSet)}]
@@ -85,7 +85,7 @@ class PacePerDistancePersonalRecordsPlot private (
     val distances = {
       fromTo(config.plotMinDistance, config.plotMaxDistance(recordsSet), config.distanceStep) ++
         // We also add the distances of each run.  This will make the gnuplot line interpolation not do weird things.
-        records.runs.map(_.totalDistance)
+        records.runs.map(_.stats.distance)
     }.sorted
 
     val data = distances flatMap { distance =>
@@ -103,9 +103,9 @@ class PacePerDistancePersonalRecordsPlot private (
     header +: data
   }
 
-  override protected def data: Set[DataFileContent] = {
+  override protected def data: Set[Plot.DataFileContent] = {
     recordsSet.map(dataRows).zipWithIndex map { case (rows, i) =>
-      DataFileContent(
+      Plot.DataFileContent(
         alias = s"plot-pr-pace-$i",
         rows = rows
       )
@@ -114,7 +114,7 @@ class PacePerDistancePersonalRecordsPlot private (
 }
 
 object PacePerDistancePersonalRecordsPlot {
-  val Version = 1
+  val Version = 2
 
   // Start at 100 meters since it is unlikely that we have accurate GPS information for such short distances.
   private val DefaultStartDistance: Int = 500

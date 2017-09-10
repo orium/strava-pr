@@ -18,12 +18,20 @@ package stravapr.gnuplot
 
 import java.io.{File, PrintWriter}
 
-case class DataFileContent(alias: String, rows: Seq[String])
+
+case class Resolution(columns: Int, lines: Int)
+
+object Resolution {
+  val Resolution720  = Resolution(1280, 720)
+  val Resolution1080 = Resolution(1920, 1080)
+  val Resolution1440 = Resolution(2560, 1440)
+  val Resolution4K   = Resolution(3840, 2160)
+}
 
 trait Plot {
-  private def createImageGnuplotHeader(imageFilename: File): Seq[String] =
+  private def createImageGnuplotHeader(imageFilename: File, resolution: Resolution): Seq[String] =
     Seq(
-      "set terminal pngcairo size 1920,1080", // TODO resolution by configuration.
+      s"set terminal pngcairo size ${resolution.columns},${resolution.lines}",
       s"set output '$imageFilename'"
     )
 
@@ -32,7 +40,7 @@ trait Plot {
 
   protected def gnuplotScript(dataFiles: Map[String, File]): Seq[String]
 
-  protected def data: Set[DataFileContent]
+  protected def data: Set[Plot.DataFileContent]
 
   private def dumpToTempFile(lines: Seq[String], filenamePrefix: String, filenameSuffix: String): File = {
     val file = File.createTempFile(filenamePrefix, filenameSuffix)
@@ -49,15 +57,15 @@ trait Plot {
   }
 
   private def createGnuplotFile(plotType: Plot.Type): File = {
-    val aliasFileMap: Map[String, File] = data.map { case DataFileContent(alias, rows) =>
+    val aliasFileMap: Map[String, File] = data.map { case Plot.DataFileContent(alias, rows) =>
       alias -> dumpToTempFile(rows, s"strava-pr-plot-data-$alias-", ".dat")
     }.toMap
 
     val scriptBody = gnuplotScript(aliasFileMap)
 
     val completeScript = plotType match {
-      case Plot.Type.CreateImage(imageFilename) =>
-        createImageGnuplotHeader(imageFilename) ++ scriptBody
+      case Plot.Type.CreateImage(imageFilename, resolution) =>
+        createImageGnuplotHeader(imageFilename, resolution) ++ scriptBody
 
       case Plot.Type.Show =>
 
@@ -67,14 +75,14 @@ trait Plot {
     dumpToTempFile(completeScript, "strava-pr-plot-", ".gnuplot")
   }
 
-  def createPNGImage(imageFilename: File): Unit = {
-    val gnuplotFile = createGnuplotFile(Plot.Type.CreateImage(imageFilename))
+  def createPNGImage(imageFilename: File, resolution: Resolution): Unit = {
+    val gnuplotFile = createGnuplotFile(Plot.Type.CreateImage(imageFilename, resolution))
     runGnuplot(gnuplotFile)
   }
 
-  def createPNGImage(): File = {
+  def createPNGImage(resolution: Resolution): File = {
     val pngFile = File.createTempFile("strava-pr-", ".png")
-    createPNGImage(pngFile)
+    createPNGImage(pngFile, resolution)
     pngFile
   }
 
@@ -95,6 +103,8 @@ object Plot {
   sealed trait Type
   object Type {
     case object Show extends Type
-    case class  CreateImage(imageFilename: File) extends Type
+    case class  CreateImage(imageFilename: File, resolution: Resolution) extends Type
   }
+
+  case class DataFileContent(alias: String, rows: Seq[String])
 }

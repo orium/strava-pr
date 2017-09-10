@@ -83,20 +83,27 @@ case class Run(
   }
 
   def timeAt(distance: Int): Option[Duration] =
-    if (0 <= distance && distance <= totalDistance) Some(timeAtDistance(distance)) else None
+    if (0 <= distance && distance <= stats.distance) Some(timeAtDistance(distance)) else None
 
-  // TODO Run.Stats
-  def totalDistance: Int = distances.last
+  def stats: Run.Stats = Run.Stats(
+    distance = distances.last
+  )
 
   def records: Records = Records.fromRuns(Runs(this))
 
   def runSlices(distance: Int): Seq[RunSlice] = {
-    (0 to (totalDistance - distance)).map { startDistance =>
+    (0 to (stats.distance - distance)).map { startDistance =>
       val time = timeAt(startDistance + distance).get - timeAt(startDistance).get
 
       RunSlice(distance, startDistance, time, this)
     }
   }
+}
+
+object Run {
+  case class Stats(
+    distance: Int
+  )
 }
 
 case class TimeSpan(start: LocalDateTime, end: LocalDateTime)
@@ -113,7 +120,7 @@ class Runs private (runs: Seq[Run]) extends Traversable[Run] {
 
   def stats: Runs.Stats =
     Runs.Stats(
-      maxDistance = runs.map(_.totalDistance).foldLeft(0)(_ max _)
+      maxDistance = runs.map(_.stats.distance).foldLeft(0)(_ max _)
     )
 
   def timeSpan: Option[TimeSpan] = for {

@@ -26,6 +26,7 @@ import kiambogo.scrava.models._
 import net.liftweb.json.DefaultFormats
 import stravapr.Utils.RichDuration
 import stravapr.animation.Gif
+import stravapr.gnuplot.Resolution
 import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot
 
 import scala.concurrent.duration._
@@ -81,7 +82,7 @@ object Main {
           val run = distanceDuration.run
           val formatedDuration = distanceDuration.duration.formatHMS
           val url = s"https://www.strava.com/activities/${run.id}"
-          val runDist = run.totalDistance
+          val runDist = run.stats.distance
           val pace = distanceDuration.pace
 
           println(f"    $formatedDuration%14s    ${run.date}%6s    $pace%8s          ${distanceDuration.startAt}%6d               $runDist%6d   $url")
@@ -180,11 +181,12 @@ object Main {
         fetchRuns(client)
       case Seq("history") =>
         val plotConfig = PacePerDistancePersonalRecordsPlot.Config(
-          plotMinTime = Some(3.minutes + 30.seconds), // TODO auto discover this
-          plotMaxTime = Some(8.minutes + 30.seconds), // TODO auto discover this
+          plotMinTime = Some(3.minutes + 30.seconds), // TODO config
+          plotMaxTime = Some(8.minutes + 30.seconds), // TODO config
           plotMinDistance = 500,
           plotMaxDistanceOpt = Some(runs.stats.maxDistance),
         )
+        val resolution = Resolution.Resolution1080 // TODO config
 
         val allImages = runs.runHistory.personalRecordsHistory
           .flatMap { case RunHistory.PersonalRecordsAtRun(_, runRecords, previousPersonalRecords, personalRecords) =>
@@ -194,8 +196,9 @@ object Main {
             )
 
             val frames = Seq(
-              prAndRacePlot.createPNGImage(),
-              PacePerDistancePersonalRecordsPlot.fromPersonalRecords(personalRecords, plotConfig).createPNGImage()
+              prAndRacePlot.createPNGImage(resolution),
+              PacePerDistancePersonalRecordsPlot.fromPersonalRecords(personalRecords, plotConfig)
+                .createPNGImage(resolution)
             )
 
             frames
@@ -230,8 +233,9 @@ object Main {
       case Seq("upload") =>
         config.imgurClientId match {
           case Some(clientId) =>
+            val resolution = Resolution.Resolution1080 // TODO config
             val plot = PacePerDistancePersonalRecordsPlot.fromRuns(runs)
-            val pngFile = plot.createPNGImage()
+            val pngFile = plot.createPNGImage(resolution)
 
             val imgurUploader = new ImgurUploader(clientId)
 
@@ -277,7 +281,11 @@ object Main {
                     Set(previousPersonalRecords, runRecords)
                   )
 
-                  val imageUrl: URL = imgurRateLimiter(imgurUploader.upload(prAndRacePlot.createPNGImage()).get)
+                  val imageUrl: URL = {
+                    val resolution = Resolution.Resolution1080 // TODO config
+
+                    imgurRateLimiter(imgurUploader.upload(prAndRacePlot.createPNGImage(resolution)).get)
+                  }
 
                   val newDescription = description match {
                     case Some(lines) =>
