@@ -15,6 +15,7 @@ lazy val stravaPRSettings = Seq(
     Dependency.TypesafeConfig,
     Dependency.PlayJson,
     Dependency.Scrimage,
+    Dependency.Scopt,
 
     Dependency.ScalaTest
   )

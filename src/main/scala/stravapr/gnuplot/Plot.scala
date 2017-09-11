@@ -93,7 +93,7 @@ trait Plot {
     gnuplotProcess.waitFor()
   }
 
-  def showPlot(): Unit = {
+  def show(): Unit = {
     val gnuplotFile = createGnuplotFile(Plot.Type.Show)
     runGnuplot(gnuplotFile)
   }

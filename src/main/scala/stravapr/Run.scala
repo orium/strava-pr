@@ -16,6 +16,7 @@
 
 package stravapr
 
+import java.net.URL
 import java.time.{LocalDate, LocalDateTime, ZoneOffset}
 import java.util.concurrent.TimeUnit
 
@@ -33,6 +34,12 @@ object Pace {
     require(distance > 0)
 
     new Pace(duration / (distance / 1000.0))
+  }
+
+  implicit object PaceIsOrdered extends Ordering[Pace] {
+    def compare(a: Pace, b: Pace): Int = {
+      a.durationPerKm.compare(b.durationPerKm)
+    }
   }
 }
 
@@ -64,6 +71,8 @@ case class Run(
 
   def date: LocalDate = datetime.toLocalDate
 
+  def stravaUrl: URL = new URL(s"https://www.strava.com/activities/$id")
+
   private def interpolate(d1: Int, t1: Int, d2: Int, t2: Int, d: Int): Int = {
     val m = (t1 - t2).toDouble / (d1 - d2).toDouble
     val b = t2 - m * d2
@@ -86,10 +95,14 @@ case class Run(
     if (0 <= distance && distance <= stats.distance) Some(timeAtDistance(distance)) else None
 
   def stats: Run.Stats = Run.Stats(
-    distance = distances.last
+    distance = distances.last,
+    pace = this.asRunSlice.pace
   )
 
   def records: Records = Records.fromRuns(Runs(this))
+
+  def asRunSlice: RunSlice =
+    RunSlice(distances.last, 0, Duration(times.last, TimeUnit.SECONDS), this)
 
   def runSlices(distance: Int): Seq[RunSlice] = {
     (0 to (stats.distance - distance)).map { startDistance =>
@@ -102,7 +115,8 @@ case class Run(
 
 object Run {
   case class Stats(
-    distance: Int
+    distance: Int,
+    pace: Pace
   )
 }
 

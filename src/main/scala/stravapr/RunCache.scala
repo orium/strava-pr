@@ -62,6 +62,9 @@ class RunCache private (cache: MutableMap[Int, Run]) {
     }
   }
 
+  def invalidate(): Unit =
+    cache.clear()
+
   def size: Int = cache.size
 }
 

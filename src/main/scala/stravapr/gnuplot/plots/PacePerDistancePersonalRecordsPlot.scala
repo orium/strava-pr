@@ -21,14 +21,17 @@ import java.io.File
 import stravapr.Utils.{RichDuration, fromTo}
 import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot.Config
 import stravapr.gnuplot.Plot
-import stravapr.{Records, Run, Runs}
+import stravapr.{Pace, Records, Run, Runs}
 
 import scala.concurrent.duration._
 
-class PacePerDistancePersonalRecordsPlot private (
+case class PacePerDistancePersonalRecordsPlot(
   recordsSet: Set[Records],
   config: Config
 ) extends Plot {
+  def withConfig(newConfig: Config): PacePerDistancePersonalRecordsPlot =
+    copy(config = newConfig)
+
   override protected def gnuplotScript(dataFiles: Map[String, File]): Seq[String] = {
     val preamble =
       s"""set title "Pace by distance for personal records"
@@ -80,13 +83,18 @@ class PacePerDistancePersonalRecordsPlot private (
     preamble ++ plotCmd
   }
 
+  private lazy val distances: Seq[Int] = {
+    val allRuns = recordsSet.flatMap(_.runs)
+
+    val d = fromTo(config.plotMinDistance, config.plotMaxDistance(recordsSet), config.distanceStep) ++
+      // We also add the distances of each run.  This will make the gnuplot line interpolation not do weird things.
+      allRuns.map(_.stats.distance)
+
+    d.toSet.toArray.sorted
+  }
+
   private def dataRows(records: Records): Seq[String] = {
     val header = "# distance      time       pace      pace secs     date     color"
-    val distances = {
-      fromTo(config.plotMinDistance, config.plotMaxDistance(recordsSet), config.distanceStep) ++
-        // We also add the distances of each run.  This will make the gnuplot line interpolation not do weird things.
-        records.runs.map(_.stats.distance)
-    }.sorted
 
     val data = distances flatMap { distance =>
       records.bestTime(distance) map { bestTime =>
@@ -101,6 +109,16 @@ class PacePerDistancePersonalRecordsPlot private (
     }
 
     header +: data
+  }
+
+  lazy val (minPace: Pace, maxPace: Pace) = {
+    val paces: Set[Pace] = recordsSet flatMap { records =>
+      distances flatMap { distance =>
+        records.bestTime(distance).map(_.pace)
+      }
+    }
+
+    (paces.min, paces.max)
   }
 
   override protected def data: Set[Plot.DataFileContent] = {

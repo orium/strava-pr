@@ -7,6 +7,7 @@ object Dependency {
     val PlayJson       = "2.6.3"
     val Scrimage       = "3.0.0-alpha3"
     val ScalaTest      = "3.0.4"
+    val Scopt          = "3.7.0"
   }
 
   val Scrava         = "com.github.kiambogo"    %% "scrava"        % Version.Scrava
@@ -14,4 +15,5 @@ object Dependency {
   val PlayJson       = "com.typesafe.play"      %% "play-json"     % Version.PlayJson
   val Scrimage       = "com.sksamuel.scrimage"  %% "scrimage-core" % Version.Scrimage
   val ScalaTest      = "org.scalatest"          %% "scalatest"     % Version.ScalaTest
+  val Scopt          = "com.github.scopt"       %% "scopt"         % Version.Scopt
 }

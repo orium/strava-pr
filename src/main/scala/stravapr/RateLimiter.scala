@@ -16,31 +16,24 @@
 
 package stravapr
 
-import java.io.File
+import kiambogo.scrava.models.RateLimitException
 
-import com.typesafe.config.ConfigFactory
+import scala.concurrent.duration._
 
-import scala.collection.JavaConverters._
-import scala.util.Try
+class RateLimiter(isRateLimitExceeded: Exception => Boolean) {
+  private def run[T](f: => T, backoff: Duration = 1.minute): T = try {
+    f
+  } catch {
+    case e: Exception if isRateLimitExceeded(e) =>
+      println(s"Rate limit exceeded.  Sleeping for $backoff...")
 
-case class Config(
-  accessToken: String,
-  imgurClientId: Option[String]
-)
+      Thread.sleep(backoff.toMillis)
 
-object Config {
-  val DefaultConfigFileContent: String =
-    s"""auth-token = "put a token here"
-       |
-       |# imgur-client-id = "put a client here"
-     """.stripMargin
-
-  def fromFile(configFile: File): Try[Config] = Try {
-    val c = ConfigFactory.parseFile(configFile)
-
-    val authToken     = c.getString("auth-token")
-    val imgurClientId = if (c.hasPath("imgur-client-id")) Some(c.getString("imgur-client-id")) else None
-
-    Config(authToken, imgurClientId)
+      run(f, backoff * 2)
   }
+
+  RateLimitException.getClass
+
+  def apply[T](f: => T): T =
+    run(f)
 }
