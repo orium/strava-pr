@@ -68,8 +68,8 @@ object Main {
 
     val Strava.PopulateCacheResult(runs, fetchedRuns) = strava.populateRunCache(Files.CacheFile, invalidateCache)
 
-    println(s"Fetched $fetchedRuns runs from strava.")
-    println(s"You have now a total of ${runs.size} runs.")
+    println(s"Fetched $fetchedRuns runs from Strava.")
+    println(s"You have now a total of ${runs.size} runs locally.")
   }
 
   private def stravaAddDescriptionHistory(
@@ -98,7 +98,7 @@ object Main {
           allRunActivities.map { activity =>
             runs.get(activity.id) match {
               case Some(run) => run -> activity
-              case None => // Cache miss, got to fetch it fully.
+              case None => // Cache miss, lets fetch it fully.
                 strava.activityToRun(activity) -> activity
             }
           }.toMap
@@ -155,7 +155,7 @@ object Main {
                   throw e
               }
 
-              println(s"Added plot to run of ${activity.start_date}.")
+              println(s"Added plot to run of ${run.date}.")
             }
           }
       case None =>
@@ -278,7 +278,7 @@ object Main {
     if (!isSetupDone()) {
       createConfigFile()
 
-      println("Strava-PR did not have a configuration file.  I have created one.  Please configure properly:")
+      println("There was no configuration file.  I have created one.  Please configure it properly:")
       println()
       println(s"    ${Files.ConfigFile}")
 

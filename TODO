@@ -1,2 +1,4 @@
-* better color palette?
-* README
+* better color palette?.  parameterizable.  See
+    https://stackoverflow.com/questions/470690/how-to-automatically-generate-n-distinct-colors
+    https://stackoverflow.com/questions/309149/generate-distinctly-different-rgb-colors-in-graphs
+    Kelly's 22 colors of maximum contrast

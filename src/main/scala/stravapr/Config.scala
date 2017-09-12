@@ -32,8 +32,8 @@ object Config {
   val DefaultConfigFileContent: String =
     s"""auth-token = "put a token here"
        |
-       |# imgur-client-id = "put a client here"
-     """.stripMargin
+       |# imgur-client-id = "put a client id here"
+       |""".stripMargin
 
   def fromFile(configFile: File): Try[Config] = Try {
     val c = ConfigFactory.parseFile(configFile)

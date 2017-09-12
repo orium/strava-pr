@@ -17,8 +17,10 @@ lazy val stravaPRSettings = Seq(
     Dependency.Scrimage,
     Dependency.Scopt,
 
-    Dependency.ScalaTest
-  )
+    Dependency.ScalaTest % Test
+  ),
+
+  mappings in Universal += file("README.md") -> "README.md"
 )
 
 enablePlugins(JavaAppPackaging)
