@@ -74,14 +74,14 @@ object Main {
 
   private def stravaAddDescriptionHistory(
     stravaAccessToken: String,
-    optImgurClientId: Option[String],
+    ImgurClientIdOpt: Option[String],
     resolution: Resolution,
     startDistance: Int,
     forceRefresh: Boolean
   ): Unit = {
     val runs: Runs = cachedRuns()
 
-    optImgurClientId match {
+    ImgurClientIdOpt match {
       case Some(imgurClientId) =>
         val stravaClient = new ScravaClient(stravaAccessToken)
         val strava = Strava(
@@ -229,8 +229,8 @@ object Main {
       val maxPace = allPlots.map(_.maxPace).max
 
       PacePerDistancePersonalRecordsPlot.Config(
-        plotMinTime = Some(minPace.durationPerKm),
-        plotMaxTime = Some(maxPace.durationPerKm),
+        plotMinTimeOpt = Some(minPace.durationPerKm),
+        plotMaxTimeOpt = Some(maxPace.durationPerKm),
         plotMinDistance = startDistance,
         plotMaxDistanceOpt = Some(runs.stats.maxDistance),
       )

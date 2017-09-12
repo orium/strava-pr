@@ -50,7 +50,7 @@ case class PacePerDistancePersonalRecordsPlot(
          |set xtics 500
          |
          |set xrange [${config.plotMinDistance}:${config.plotMaxDistance(recordsSet)}]
-         |set yrange [${config.plotMinTime.map(_.toSeconds).getOrElse("")}:${config.plotMaxTime.map(_.toSeconds).getOrElse("")}]
+         |set yrange [${config.plotMaxTime(this).toSeconds}:${config.plotMinTime(this).toSeconds}]
          |set offset graph 0, graph 0, graph .05, graph .05
          |
          |set palette maxcolors 12
@@ -132,19 +132,25 @@ case class PacePerDistancePersonalRecordsPlot(
 }
 
 object PacePerDistancePersonalRecordsPlot {
-  val Version = 2
+  val Version = 3
 
   // Start at 100 meters since it is unlikely that we have accurate GPS information for such short distances.
   private val DefaultStartDistance: Int = 500
   private val DefaultDistanceStep: Int = 25
 
   case class Config(
-    plotMinTime: Option[Duration] = None,
-    plotMaxTime: Option[Duration] = None,
+    plotMinTimeOpt: Option[Duration] = None,
+    plotMaxTimeOpt: Option[Duration] = None,
     plotMinDistance: Int = DefaultStartDistance,
     plotMaxDistanceOpt: Option[Int] = None,
     distanceStep: Int = DefaultDistanceStep
   ) {
+    def plotMinTime(plot: PacePerDistancePersonalRecordsPlot): Duration =
+      plotMinTimeOpt.getOrElse(plot.minPace.durationPerKm)
+
+    def plotMaxTime(plot: PacePerDistancePersonalRecordsPlot): Duration =
+      plotMaxTimeOpt.getOrElse(plot.maxPace.durationPerKm)
+
     def plotMaxDistance(personalRecordsSet: Set[Records]): Int =
       plotMaxDistanceOpt.getOrElse {
         personalRecordsSet.map(_.runs.stats.maxDistance).max
