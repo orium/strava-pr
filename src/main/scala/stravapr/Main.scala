@@ -33,7 +33,7 @@ object Main {
   private object Files {
     val ConfigDir:  File = new File(new File(Properties.userHome, ".config"), "strava-pr")
     val ConfigFile: File = new File(ConfigDir, "strava-pr.conf")
-    val CacheFile:  File = new File(ConfigDir, "cache")
+    val RunCacheFile:  File = new File(ConfigDir, "run-cache")
   }
 
   private object RateLimiters {
@@ -55,18 +55,20 @@ object Main {
   }
 
   private def cachedRuns(): Runs = {
-    val runCache: RunCache = if (Files.CacheFile.exists()) RunCache.fromFile(Files.CacheFile).get else RunCache.empty
+    val runCache: RunCache = if (Files.RunCacheFile.exists()) RunCache.fromFile(Files.RunCacheFile).get else RunCache.empty
     runCache.allRuns
   }
 
   private def stravaFetch(accessToken: String, invalidateCache: Boolean): Unit = {
     val strava = Strava(
       new ScravaClient(accessToken),
-      Files.CacheFile,
+      Files.RunCacheFile,
       RateLimiters.stravaRateLimiter
     )
 
-    val Strava.PopulateCacheResult(runs, fetchedRuns) = strava.populateRunCache(Files.CacheFile, invalidateCache)
+    val Strava.PopulateCacheResult(runs, fetchedRuns) = strava.populateRunCache(Files.RunCacheFile, invalidateCache) { run =>
+      println(s"Fetched run of ${run.date}.")
+    }
 
     println(s"Fetched $fetchedRuns runs from Strava.")
     println(s"You have now a total of ${runs.size} runs locally.")
@@ -86,7 +88,7 @@ object Main {
         val stravaClient = new ScravaClient(stravaAccessToken)
         val strava = Strava(
           stravaClient,
-          Files.CacheFile,
+          Files.RunCacheFile,
           RateLimiters.stravaRateLimiter
         )
 

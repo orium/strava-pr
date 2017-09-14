@@ -53,7 +53,7 @@ class Strava(
     Run(activity.id, datetime, times, distances)
   }
 
-  def populateRunCache(cacheFile: File, invalidateCache: Boolean): Strava.PopulateCacheResult = {
+  def populateRunCache(cacheFile: File, invalidateCache: Boolean)(reportFetch: Run => Unit): Strava.PopulateCacheResult = {
     if (invalidateCache) {
       runCache.invalidate()
     }
@@ -62,10 +62,13 @@ class Strava(
 
     val runs = Runs {
       rateLimiter(client.listAthleteActivities(retrieveAll = true))
+        .sortBy(_.start_date)
         .map(_.id)
         .flatMap { id =>
           runCache.get(id).orElse {
-            fetchRunActivities(Set(id)).map(activity => activityToRun(activity)).headOption
+            val r = fetchRunActivities(Set(id)).map(activity => activityToRun(activity)).headOption
+            r.foreach(reportFetch)
+            r
           }
         }.toSet
     }
