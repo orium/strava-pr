@@ -4,8 +4,8 @@ object Dependency {
   private object Version {
     val Scrava         = "1.3.0"
     val TypesafeConfig = "1.3.1"
-    val PlayJson       = "2.6.3"
-    val Scrimage       = "3.0.0-alpha3"
+    val PlayJson       = "2.6.4"
+    val Scrimage       = "3.0.0-alpha4"
     val ScalaTest      = "3.0.4"
     val Scopt          = "3.7.0"
   }

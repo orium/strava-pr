@@ -1,5 +1,4 @@
 val ProjectName  = "strava-pr"
-val Version      = "0.1.0-SNAPSHOT"
 val ScalaVersion = "2.12.3"
 
 lazy val stravaPR = (project in file("."))
@@ -7,7 +6,6 @@ lazy val stravaPR = (project in file("."))
 
 lazy val stravaPRSettings = Seq(
   name         := ProjectName,
-  version      := Version,
   scalaVersion := ScalaVersion,
 
   libraryDependencies ++= Seq(
