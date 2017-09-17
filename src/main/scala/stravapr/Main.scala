@@ -131,8 +131,12 @@ object Main {
               val newDescription = description match {
                 case Some(lines) =>
                   val linesWithoutPacePerDistance = lines.filterNot(_.startsWith(descriptionLineStart))
+                  val cleanedLines = linesWithoutPacePerDistance
+                    .reverse
+                    .dropWhile(_.isEmpty)
+                    .reverse
 
-                  linesWithoutPacePerDistance ++ Seq("", s"$descriptionLine$imageUrl")
+                  cleanedLines ++ Seq("", s"$descriptionLine$imageUrl")
                 case None => Seq(s"$descriptionLine$imageUrl")
               }
 
