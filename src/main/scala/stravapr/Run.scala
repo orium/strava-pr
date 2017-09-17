@@ -96,6 +96,7 @@ case class Run(
 
   def stats: Run.Stats = Run.Stats(
     distance = distances.last,
+    duration = this.asRunSlice.duration,
     pace = this.asRunSlice.pace
   )
 
@@ -116,6 +117,7 @@ case class Run(
 object Run {
   case class Stats(
     distance: Int,
+    duration: Duration,
     pace: Pace
   )
 }

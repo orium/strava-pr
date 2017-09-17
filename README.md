@@ -69,21 +69,21 @@ You can now list all your runs with
 $ strava-pr list
 ```
 ```text
-run #      date      distance (m)        pace   url
-    0   2017-07-10           1999   06'50"/km   https://www.strava.com/activities/1170543416
-    1   2017-07-12           2010   07'07"/km   https://www.strava.com/activities/1170543418
-    2   2017-07-15           1875   07'44"/km   https://www.strava.com/activities/1170543417
-    3   2017-07-21            990   05'03"/km   https://www.strava.com/activities/1171150063
-    4   2017-07-24           2508   07'02"/km   https://www.strava.com/activities/1170543421
-    5   2017-07-29           5965   07'52"/km   https://www.strava.com/activities/1170543424
-    6   2017-08-01           2978   06'53"/km   https://www.strava.com/activities/1170543422
-    7   2017-08-04           7261   08'15"/km   https://www.strava.com/activities/1170543434
-    8   2017-08-10           6989   07'45"/km   https://www.strava.com/activities/1170543432
-    9   2017-08-11           1840   07'58"/km   https://www.strava.com/activities/1170543427
-   10   2017-08-12           3988   06'51"/km   https://www.strava.com/activities/1170543414
-   11   2017-08-18           1655   05'46"/km   https://www.strava.com/activities/1170543411
-   12   2017-08-26           8586   07'35"/km   https://www.strava.com/activities/1170543425
-   13   2017-09-05          10241   07'51"/km   https://www.strava.com/activities/1170166278
+run #      date      distance (m)       duration       pace      url
+    0   2017-07-10           1999    0 h 13 m 40 s   06'50"/km   https://www.strava.com/activities/1170543416
+    1   2017-07-12           2010    0 h 14 m 20 s   07'07"/km   https://www.strava.com/activities/1170543418
+    2   2017-07-15           1875    0 h 14 m 30 s   07'44"/km   https://www.strava.com/activities/1170543417
+    3   2017-07-21            990    0 h 05 m 00 s   05'03"/km   https://www.strava.com/activities/1171150063
+    4   2017-07-24           2508    0 h 17 m 40 s   07'02"/km   https://www.strava.com/activities/1170543421
+    5   2017-07-29           5965    0 h 47 m 00 s   07'52"/km   https://www.strava.com/activities/1170543424
+    6   2017-08-01           2978    0 h 20 m 30 s   06'53"/km   https://www.strava.com/activities/1170543422
+    7   2017-08-04           7261    1 h 00 m 00 s   08'15"/km   https://www.strava.com/activities/1170543434
+    8   2017-08-10           6989    0 h 54 m 10 s   07'45"/km   https://www.strava.com/activities/1170543432
+    9   2017-08-11           1840    0 h 14 m 40 s   07'58"/km   https://www.strava.com/activities/1170543427
+   10   2017-08-12           3988    0 h 27 m 20 s   06'51"/km   https://www.strava.com/activities/1170543414
+   11   2017-08-18           1655    0 h 09 m 34 s   05'46"/km   https://www.strava.com/activities/1170543411
+   12   2017-08-26           8586    1 h 05 m 09 s   07'35"/km   https://www.strava.com/activities/1170543425
+   13   2017-09-05          10241    1 h 20 m 30 s   07'51"/km   https://www.strava.com/activities/1170166278
 ```
 
 ## All-time personal record table

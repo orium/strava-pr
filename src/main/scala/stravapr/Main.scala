@@ -172,9 +172,12 @@ object Main {
   private def list(): Unit = {
     val runs: Runs = cachedRuns()
 
-    println("run #      date      distance (m)        pace   url")
+    println("run #      date      distance (m)       duration       pace      url")
+
     runs.toIndexedSeq.zipWithIndex foreach { case (run, runNumber) =>
-      println(f"$runNumber%5d   ${run.date}%10s         ${run.stats.distance}%6d   ${run.stats.pace}%8s   ${run.stravaUrl}")
+      val formatedDuration = run.stats.duration.formatHMS
+
+      println(f"$runNumber%5d   ${run.date}%10s         ${run.stats.distance}%6d   $formatedDuration%14s   ${run.stats.pace}%8s   ${run.stravaUrl}")
     }
   }
 
