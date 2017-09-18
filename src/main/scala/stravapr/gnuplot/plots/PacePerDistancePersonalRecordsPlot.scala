@@ -132,10 +132,10 @@ case class PacePerDistancePersonalRecordsPlot(
 }
 
 object PacePerDistancePersonalRecordsPlot {
-  val Version = 3
+  val Version: Int = 4
 
   // Start at 100 meters since it is unlikely that we have accurate GPS information for such short distances.
-  private val DefaultStartDistance: Int = 500
+  private val DefaultStartDistance: Int = 400
   private val DefaultDistanceStep: Int = 25
 
   case class Config(

@@ -148,13 +148,13 @@ object Command {
       case Command.Type.Strava.AddDescriptionHistory =>
         Command.Strava.AddDescriptionHistory(
           stravaAddDescriptionHistoryResolution.getOrElse(Defaults.Resolution),
-          stravaAddDescriptionHistoryStartDistance.getOrElse(Defaults.MininumDistancePlot),
+          stravaAddDescriptionHistoryStartDistance.getOrElse(Defaults.MinimumDistancePlot),
           stravaAddDescriptionHistoryForceRefresh
         )
       case Command.Type.List        => Command.List
       case Command.Type.Show        => Command.Show(
         showRunN,
-        showStartDistance.getOrElse(Defaults.MininumDistancePlot),
+        showStartDistance.getOrElse(Defaults.MinimumDistancePlot),
         showCreateImageFilename match {
           case Some(imageFilename) => Command.Show.Mode.CreateImage(
             imageFilename,
@@ -166,7 +166,7 @@ object Command {
       case Command.Type.History =>
         Command.History(
           historyImageFilename.get,
-          historyStartDistance.getOrElse(Defaults.MininumDistancePlot),
+          historyStartDistance.getOrElse(Defaults.MinimumDistancePlot),
           historyFrameDuration.getOrElse(Defaults.History.FrameDuration),
           historyImageResolution.getOrElse(Defaults.Resolution),
           historyAnimationLoop
@@ -188,7 +188,7 @@ object CommandLineParser {
 
   object Defaults {
     val Resolution: Resolution = stravapr.gnuplot.Resolution.Resolution1080
-    val MininumDistancePlot: Int = 500
+    val MinimumDistancePlot: Int = 400
 
     object History {
       val FrameDuration: Duration = 500.milliseconds
@@ -197,16 +197,19 @@ object CommandLineParser {
     object Table {
       val BestN: Int = 5
       val Distances: Seq[Int] = Seq(
+           400,
+           805,
           1000,
           1500,
           1610,
+          2000,
           3000,
           3219,
           5000,
           7500,
          10000,
-         16094,
          15000,
+         16094,
          20000,
          21098,
          30000,
