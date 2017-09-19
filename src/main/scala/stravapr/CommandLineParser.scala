@@ -20,7 +20,7 @@ import java.io.File
 
 import scopt.OptionParser
 import stravapr.CommandLineParser.Defaults
-import stravapr.gnuplot.Resolution
+import stravapr.plot.Resolution
 
 import scala.concurrent.duration._
 import scala.util.Try
@@ -187,7 +187,7 @@ object CommandLineParser {
   val StravaPrVersion: String = getClass.getPackage.getImplementationVersion
 
   object Defaults {
-    val Resolution: Resolution = stravapr.gnuplot.Resolution.Resolution1080
+    val Resolution: Resolution = stravapr.plot.Resolution.Resolution1080
     val MinimumDistancePlot: Int = 400
 
     object History {

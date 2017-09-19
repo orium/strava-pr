@@ -14,14 +14,16 @@
  * along with strava-pr.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package stravapr.gnuplot.plots
+package stravapr.plot.plots
 
 import java.io.File
 
 import stravapr.Utils.{RichDuration, fromTo}
-import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot.Config
-import stravapr.gnuplot.Plot
-import stravapr.{Pace, Records, Run, Runs}
+import stravapr._
+import stravapr.analysis.AveragePacePerDistanceRegression
+import stravapr.analysis.AveragePacePerDistanceRegression.LogarithmicRegression
+import stravapr.plot.Plot
+import stravapr.plot.plots.PacePerDistancePersonalRecordsPlot.Config
 
 import scala.concurrent.duration._
 
@@ -29,10 +31,20 @@ case class PacePerDistancePersonalRecordsPlot(
   recordsSet: Set[Records],
   config: Config
 ) extends Plot {
+  protected case class AvgPaceCurve(logRegression: LogarithmicRegression, maxDistance: Int) {
+    def toGnuplotFunction: String =
+      s"(x <= $maxDistance) ? ${logRegression.a} + ${logRegression.b} * log(x) : 1/0"
+  }
+
+  override type ComprehensionRepType = AvgPaceCurve
+
   def withConfig(newConfig: Config): PacePerDistancePersonalRecordsPlot =
     copy(config = newConfig)
 
-  override protected def gnuplotScript(dataFiles: Map[String, File]): Seq[String] = {
+  override protected def gnuplotScript(
+    dataFiles: Map[String, File],
+    comprehensionsMap: Map[String, ComprehensionRepType]
+  ): Seq[String] = {
     val preamble =
       s"""set title "Pace by distance for personal records"
          |
@@ -72,12 +84,22 @@ case class PacePerDistancePersonalRecordsPlot(
          |set cbrange [0:12]
          |unset colorbox
          |
+         |# For the PR curves
          |set style line 1 palette
          |set style line 1 linewidth 3
+         |
+         |# For the average curves
+         |set style line 2 dashtype "."
+         |set style line 2 linewidth 2
+         |set style line 2 linecolor rgb "#505050"
        """.stripMargin.lines.toSeq
 
-    val plotCmd = dataFiles.values
-      .map(f => s""""$f" using 1:4:6 ls 1 with lines""")
+    val plotCmdLinesPrCurve = dataFiles.values
+      .map(f => s""""$f" using 1:4:6 linestyle 1 with lines""")
+    val plotCmdLineAvgCurve = comprehensionsMap.get("average-curve")
+        .map(f => s"${f.toGnuplotFunction} linestyle 2")
+
+    val plotCmd = (plotCmdLineAvgCurve ++ plotCmdLinesPrCurve)
       .mkString("plot ", ", \\\n  ", "").lines
 
     preamble ++ plotCmd
@@ -96,7 +118,7 @@ case class PacePerDistancePersonalRecordsPlot(
   private def dataRows(records: Records): Seq[String] = {
     val header = "# distance      time       pace      pace secs     date     color"
 
-    val data = distances flatMap { distance =>
+    val data = distances.flatMap { distance =>
       records.bestTime(distance) map { bestTime =>
         val duration = bestTime.duration.formatHMS.filterNot(_.isSpaceChar)
         val date     = bestTime.run.date
@@ -111,6 +133,14 @@ case class PacePerDistancePersonalRecordsPlot(
     header +: data
   }
 
+  private def averagePaceRegression(records: Records): LogarithmicRegression = {
+    val distancePaces: Map[Int, Pace] = distances.flatMap { distance =>
+      records.bestTime(distance).map(distance -> _.pace)
+    }.toMap
+
+    AveragePacePerDistanceRegression.regression(distancePaces)
+  }
+
   lazy val (minPace: Pace, maxPace: Pace) = {
     val paces: Set[Pace] = recordsSet flatMap { records =>
       distances flatMap { distance =>
@@ -121,20 +151,28 @@ case class PacePerDistancePersonalRecordsPlot(
     (paces.min, paces.max)
   }
 
-  override protected def data: Set[Plot.DataFileContent] = {
-    recordsSet.map(dataRows).zipWithIndex map { case (rows, i) =>
-      Plot.DataFileContent(
-        alias = s"plot-pr-pace-$i",
+  override protected def data: Set[Plot.Data[ComprehensionRepType]] = {
+    val runsCurves: Set[Plot.Data[ComprehensionRepType]] = recordsSet.map(dataRows).zipWithIndex map { case (rows, i) =>
+      Plot.Data.Enumeration(
+        alias = s"pr-curve-$i",
         rows = rows
       )
     }
+    val avgRegression: Option[Plot.Data[ComprehensionRepType]] = config.avgCurveOfRecords.map { records =>
+      Plot.Data.Comprehension(
+        alias = "average-curve",
+        AvgPaceCurve(averagePaceRegression(records), records.runs.stats.maxDistance)
+      )
+    }
+
+    runsCurves ++ avgRegression
   }
 }
 
 object PacePerDistancePersonalRecordsPlot {
-  val Version: Int = 4
+  val Version: Int = 5
 
-  // Start at 100 meters since it is unlikely that we have accurate GPS information for such short distances.
+  // Start at here since it is unlikely that we have accurate GPS information for such short distances.
   private val DefaultStartDistance: Int = 400
   private val DefaultDistanceStep: Int = 25
 
@@ -143,8 +181,12 @@ object PacePerDistancePersonalRecordsPlot {
     plotMaxTimeOpt: Option[Duration] = None,
     plotMinDistance: Int = DefaultStartDistance,
     plotMaxDistanceOpt: Option[Int] = None,
+    avgCurveOfRecords: Option[Records] = None,
     distanceStep: Int = DefaultDistanceStep
   ) {
+    def withAvgCurveOfRecords(avgCurveOfRecords: Records): Config =
+      this.copy(avgCurveOfRecords = Some(avgCurveOfRecords))
+
     def plotMinTime(plot: PacePerDistancePersonalRecordsPlot): Duration =
       plotMinTimeOpt.getOrElse(plot.minPace.durationPerKm)
 

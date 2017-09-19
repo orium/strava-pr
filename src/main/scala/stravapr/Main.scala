@@ -23,8 +23,8 @@ import kiambogo.scrava.ScravaClient
 import kiambogo.scrava.models._
 import stravapr.Utils.RichDuration
 import stravapr.animation.Gif
-import stravapr.gnuplot.plots.PacePerDistancePersonalRecordsPlot
-import stravapr.gnuplot.{Plot, Resolution}
+import stravapr.plot.plots.PacePerDistancePersonalRecordsPlot
+import stravapr.plot.{Plot, Resolution}
 
 import scala.concurrent.duration._
 import scala.util.Properties
@@ -121,7 +121,8 @@ object Main {
               val prAndRacePlot = PacePerDistancePersonalRecordsPlot.fromMultiplePersonalRecords(
                 Set(previousPersonalRecords, runRecords),
                 PacePerDistancePersonalRecordsPlot.Config(
-                  plotMinDistance = startDistance
+                  plotMinDistance = startDistance,
+                  avgCurveOfRecords = Some(previousPersonalRecords) // WIP we should add both curves: before and after
                 )
               )
 
@@ -184,7 +185,10 @@ object Main {
   private def show(runNumber: Option[Int], startDistance: Int, mode: Command.Show.Mode): Unit = {
     val runs: Runs = cachedRuns()
 
-    val plotConfig = PacePerDistancePersonalRecordsPlot.Config(plotMinDistance = startDistance)
+    val plotConfig = PacePerDistancePersonalRecordsPlot.Config(
+      plotMinDistance = startDistance,
+      avgCurveOfRecords = Some(runs.personalRecords)
+    )
 
     val plot: Option[Plot] = runNumber match {
       case Some(runN) if runN < runs.size =>
@@ -220,11 +224,12 @@ object Main {
     animationLoop: Boolean
   ): Unit = {
     val runs: Runs = cachedRuns()
+    val personalRecordsHistory = runs.runHistory.personalRecordsHistory
 
-    val allPlots = runs.runHistory.personalRecordsHistory
+    val allPlots = personalRecordsHistory
       .flatMap { case RunHistory.PersonalRecordsAtRun(_, runRecords, previousPersonalRecords, personalRecords) =>
         val prAndRacePlot = PacePerDistancePersonalRecordsPlot.fromMultiplePersonalRecords(
-          Set(previousPersonalRecords, runRecords)
+          Set(previousPersonalRecords, runRecords),
         )
 
         Seq(
@@ -233,21 +238,29 @@ object Main {
         )
       }
 
-    val plotConfig = {
+    val allConfigs = {
       val minPace = allPlots.map(_.minPace).min
       val maxPace = allPlots.map(_.maxPace).max
+      val baseConfig =
+        PacePerDistancePersonalRecordsPlot.Config(
+          plotMinTimeOpt = Some(minPace.durationPerKm),
+          plotMaxTimeOpt = Some(maxPace.durationPerKm),
+          plotMinDistance = startDistance,
+          plotMaxDistanceOpt = Some(runs.stats.maxDistance)
+        )
 
-      PacePerDistancePersonalRecordsPlot.Config(
-        plotMinTimeOpt = Some(minPace.durationPerKm),
-        plotMaxTimeOpt = Some(maxPace.durationPerKm),
-        plotMinDistance = startDistance,
-        plotMaxDistanceOpt = Some(runs.stats.maxDistance),
-      )
+      personalRecordsHistory
+        .flatMap { case RunHistory.PersonalRecordsAtRun(_, _, previousPersonalRecords, personalRecords) =>
+          Seq(
+            baseConfig.withAvgCurveOfRecords(previousPersonalRecords),
+            baseConfig.withAvgCurveOfRecords(personalRecords)
+          )
+        }
     }
 
-    val images = allPlots
+    val images = (allPlots zip allConfigs)
       .drop(1) // The first two frames will are the same.
-      .map(_.withConfig(plotConfig))
+      .map { case (p, c) => p.withConfig(c) }
       .map(_.createPNGImage(resolution))
 
     Gif.createGif(imageFile, images, delay = frameDuration, loop = animationLoop)

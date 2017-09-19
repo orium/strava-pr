@@ -14,7 +14,7 @@
  * along with strava-pr.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package stravapr.gnuplot
+package stravapr.plot
 
 import java.io.{File, PrintWriter}
 
@@ -29,6 +29,8 @@ object Resolution {
 }
 
 trait Plot {
+  protected type ComprehensionRepType
+
   private def createImageGnuplotHeader(imageFilename: File, resolution: Resolution): Seq[String] =
     Seq(
       s"set terminal pngcairo size ${resolution.columns},${resolution.lines}",
@@ -38,9 +40,9 @@ trait Plot {
   private def pauseForEnterTail: Seq[String] =
     Seq("pause -1 \"Hit return to continue\"")
 
-  protected def gnuplotScript(dataFiles: Map[String, File]): Seq[String]
+  protected def gnuplotScript(dataFiles: Map[String, File], comprehensionsMap: Map[String, ComprehensionRepType]): Seq[String]
 
-  protected def data: Set[Plot.DataFileContent]
+  protected def data: Set[Plot.Data[ComprehensionRepType]]
 
   private def dumpToTempFile(lines: Seq[String], filenamePrefix: String, filenameSuffix: String): File = {
     val file = File.createTempFile(filenamePrefix, filenameSuffix)
@@ -57,11 +59,14 @@ trait Plot {
   }
 
   private def createGnuplotFile(plotType: Plot.Type): File = {
-    val aliasFileMap: Map[String, File] = data.map { case Plot.DataFileContent(alias, rows) =>
+    val aliasFileMap: Map[String, File] = data.collect { case Plot.Data.Enumeration(alias, rows) =>
       alias -> dumpToTempFile(rows, s"strava-pr-plot-data-$alias-", ".dat")
     }.toMap
+    val comprehensionsMap = data.collect { case Plot.Data.Comprehension(alias, d) =>
+      alias -> d
+    }.toMap
 
-    val scriptBody = gnuplotScript(aliasFileMap)
+    val scriptBody = gnuplotScript(aliasFileMap, comprehensionsMap)
 
     val completeScript = plotType match {
       case Plot.Type.CreateImage(imageFilename, resolution) =>
@@ -106,5 +111,11 @@ object Plot {
     case class  CreateImage(imageFilename: File, resolution: Resolution) extends Type
   }
 
-  case class DataFileContent(alias: String, rows: Seq[String])
+  sealed trait Data[+C] {
+    def alias: String
+  }
+  object Data {
+    case class Enumeration(alias: String, rows: Seq[String]) extends Data[Nothing]
+    case class Comprehension[C](alias: String, data: C)      extends Data[C]
+  }
 }
