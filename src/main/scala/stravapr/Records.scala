@@ -116,6 +116,12 @@ sealed trait Records {
   def merge(other: Records): Records = {
     new Records.Merged(this, other)
   }
+
+  override def equals(o: Any) = o match {
+    case other: Records => runs == other.runs
+    case _ => false
+  }
+  override def hashCode = runs.hashCode
 }
 
 object Records {

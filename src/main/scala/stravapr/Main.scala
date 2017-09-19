@@ -109,7 +109,7 @@ object Main {
         val allRuns = Runs(runActivityMap.keySet)
 
         allRuns.runHistory.personalRecordsHistory
-          .foreach { case RunHistory.PersonalRecordsAtRun(run, runRecords, previousPersonalRecords, _) =>
+          .foreach { case RunHistory.PersonalRecordsAtRun(run, runRecords, previousPersonalRecords, currentPersonalRecords) =>
             val activity = runActivityMap(run)
             val descriptionLineStart = s"Record pace per distance v"
             val descriptionLine = s"$descriptionLineStart${PacePerDistancePersonalRecordsPlot.Version}: "
@@ -122,12 +122,13 @@ object Main {
                 Set(previousPersonalRecords, runRecords),
                 PacePerDistancePersonalRecordsPlot.Config(
                   plotMinDistance = startDistance,
-                  avgCurveOfRecords = Some(previousPersonalRecords) // WIP we should add both curves: before and after
+                  avgCurveOfRecords = Set(previousPersonalRecords, currentPersonalRecords)
                 )
               )
 
-              val imageUrl: URL =
-                RateLimiters.imgurRateLimiter(imgurUploader.upload(prAndRacePlot.createPNGImage(resolution)).get)
+              val imageFile = prAndRacePlot.createPNGImage(resolution)
+              imageFile.deleteOnExit()
+              val imageUrl: URL = RateLimiters.imgurRateLimiter(imgurUploader.upload(imageFile).get)
 
               val newDescription = description match {
                 case Some(lines) =>
@@ -187,7 +188,7 @@ object Main {
 
     val plotConfig = PacePerDistancePersonalRecordsPlot.Config(
       plotMinDistance = startDistance,
-      avgCurveOfRecords = Some(runs.personalRecords)
+      avgCurveOfRecords = Set(runs.personalRecords)
     )
 
     val plot: Option[Plot] = runNumber match {
@@ -252,8 +253,8 @@ object Main {
       personalRecordsHistory
         .flatMap { case RunHistory.PersonalRecordsAtRun(_, _, previousPersonalRecords, personalRecords) =>
           Seq(
-            baseConfig.withAvgCurveOfRecords(previousPersonalRecords),
-            baseConfig.withAvgCurveOfRecords(personalRecords)
+            baseConfig.addAvgCurveOfRecords(previousPersonalRecords),
+            baseConfig.addAvgCurveOfRecords(personalRecords)
           )
         }
     }

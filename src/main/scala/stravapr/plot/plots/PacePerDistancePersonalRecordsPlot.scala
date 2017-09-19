@@ -62,8 +62,7 @@ case class PacePerDistancePersonalRecordsPlot(
          |set xtics 500
          |
          |set xrange [${config.plotMinDistance}:${config.plotMaxDistance(recordsSet)}]
-         |set yrange [${config.plotMaxTime(this).toSeconds}:${config.plotMinTime(this).toSeconds}]
-         |set offset graph 0, graph 0, graph .05, graph .05
+         |set yrange [${config.plotMaxTime(this).toSeconds + 10}:${config.plotMinTime(this).toSeconds - 5}]
          |
          |set palette maxcolors 12
          |set palette defined ( \\
@@ -96,8 +95,8 @@ case class PacePerDistancePersonalRecordsPlot(
 
     val plotCmdLinesPrCurve = dataFiles.values
       .map(f => s""""$f" using 1:4:6 linestyle 1 with lines""")
-    val plotCmdLineAvgCurve = comprehensionsMap.get("average-curve")
-        .map(f => s"${f.toGnuplotFunction} linestyle 2")
+    val plotCmdLineAvgCurve = comprehensionsMap.values
+      .map(f => s"${f.toGnuplotFunction} linestyle 2")
 
     val plotCmd = (plotCmdLineAvgCurve ++ plotCmdLinesPrCurve)
       .mkString("plot ", ", \\\n  ", "").lines
@@ -152,20 +151,22 @@ case class PacePerDistancePersonalRecordsPlot(
   }
 
   override protected def data: Set[Plot.Data[ComprehensionRepType]] = {
-    val runsCurves: Set[Plot.Data[ComprehensionRepType]] = recordsSet.map(dataRows).zipWithIndex map { case (rows, i) =>
-      Plot.Data.Enumeration(
-        alias = s"pr-curve-$i",
-        rows = rows
-      )
-    }
-    val avgRegression: Option[Plot.Data[ComprehensionRepType]] = config.avgCurveOfRecords.map { records =>
-      Plot.Data.Comprehension(
-        alias = "average-curve",
-        AvgPaceCurve(averagePaceRegression(records), records.runs.stats.maxDistance)
-      )
-    }
+    val runsCurves: Set[Plot.Data[ComprehensionRepType]] = recordsSet.map(dataRows)
+      .zipWithIndex.map { case (rows, i) =>
+        Plot.Data.Enumeration(
+          alias = s"pr-curve-$i",
+          rows = rows
+        )
+      }
+    val avgRegressions: Set[Plot.Data[ComprehensionRepType]] = config.avgCurveOfRecords
+      .zipWithIndex.map { case (records, i) =>
+        Plot.Data.Comprehension(
+          alias = s"average-curve-$i",
+          AvgPaceCurve(averagePaceRegression(records), records.runs.stats.maxDistance)
+        )
+      }
 
-    runsCurves ++ avgRegression
+    runsCurves ++ avgRegressions
   }
 }
 
@@ -181,11 +182,11 @@ object PacePerDistancePersonalRecordsPlot {
     plotMaxTimeOpt: Option[Duration] = None,
     plotMinDistance: Int = DefaultStartDistance,
     plotMaxDistanceOpt: Option[Int] = None,
-    avgCurveOfRecords: Option[Records] = None,
+    avgCurveOfRecords: Set[Records] = Set.empty,
     distanceStep: Int = DefaultDistanceStep
   ) {
-    def withAvgCurveOfRecords(avgCurveOfRecords: Records): Config =
-      this.copy(avgCurveOfRecords = Some(avgCurveOfRecords))
+    def addAvgCurveOfRecords(avgCurveOfRecords: Records): Config =
+      this.copy(avgCurveOfRecords = this.avgCurveOfRecords + avgCurveOfRecords)
 
     def plotMinTime(plot: PacePerDistancePersonalRecordsPlot): Duration =
       plotMinTimeOpt.getOrElse(plot.minPace.durationPerKm)

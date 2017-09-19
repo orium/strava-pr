@@ -62,7 +62,7 @@ trait Plot {
     val aliasFileMap: Map[String, File] = data.collect { case Plot.Data.Enumeration(alias, rows) =>
       alias -> dumpToTempFile(rows, s"strava-pr-plot-data-$alias-", ".dat")
     }.toMap
-    val comprehensionsMap = data.collect { case Plot.Data.Comprehension(alias, d) =>
+    val comprehensionsMap: Map[String, ComprehensionRepType] = data.collect { case Plot.Data.Comprehension(alias, d) =>
       alias -> d
     }.toMap
 

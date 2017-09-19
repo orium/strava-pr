@@ -125,7 +125,7 @@ object Run {
 case class TimeSpan(start: LocalDateTime, end: LocalDateTime)
 
 /** Collection of runs.  This is always sorted chronologically. */
-class Runs private (runs: Seq[Run]) extends Traversable[Run] {
+case class Runs private (runs: Seq[Run]) extends Traversable[Run] {
   lazy val runMap: Map[Int, Run] = runs.map(r => r.id -> r).toMap
 
   def get(runId: Int): Option[Run] =
