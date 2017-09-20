@@ -78,18 +78,25 @@ object RunCache {
     val runs: Seq[TypesafeConfig] = config.getConfigList("runs").asScala
 
     val cache = runs.flatMap { run =>
-      val version = run.getInt("version")
+      try {
+        val version = run.getInt("version")
 
-      if (version == RunFormatVersion) {
-        val id = run.getInt("id")
-        val datetime = LocalDateTime.parse(run.getString("datetime"), DateTimeFormatter.ISO_DATE_TIME)
-        val times = run.getIntList("times").asScala.map(_.toInt).toArray
-        val distances = run.getIntList("distances").asScala.map(_.toInt).toArray
+        if (version == RunFormatVersion) {
+          val id = run.getInt("id")
+          val datetime = LocalDateTime.parse(run.getString("datetime"), DateTimeFormatter.ISO_DATE_TIME)
+          val times = run.getIntList("times").asScala.map(_.toInt).toArray
+          val distances = run.getIntList("distances").asScala.map(_.toInt).toArray
 
-        Some(id -> Run(id, datetime, times, distances))
-      } else {
-        println("Ignoring unknown run format version in run cache.")
-        None
+          Some(id -> Run(id, datetime, times, distances))
+        } else {
+          println("Ignoring unknown run format version in run cache.")
+          None
+        }
+      } catch {
+        case e: Throwable =>
+          println("Error loading a run from cache.  Skipping it.")
+          println(s"    $e")
+          None
       }
     }
 

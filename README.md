@@ -133,10 +133,12 @@ runs of distance *≤ d*.
 ```bash
 $ strava-pr show
 ```
-![Plot created by show command](https://i.imgur.com/2uKK6HP.png)
+![Plot created by show command](images/show.png)
 
-The plot shows each run with a different color. (I’m lying.  There are a small number of colors and two runs can easily
-color-collide.)
+The plot shows each run with a different color.  (I’m lying.  There are a small number of colors and two runs can easily
+color-collide.)  It also shows you your an average PR curve (the dashed curve).  One useful way of using this curve is
+to estimate a realistic pace for futures runs.  Another encouraging way to look at it is that you can *probably* break
+your PR for distances where your PR is below this average curve (provided your fitness is didn’t get worse).
 
 It is also possible to see how a particular run stacks against the PR curve, by providing the run number (which you can
 get with `strava-pr list`):
@@ -144,7 +146,7 @@ get with `strava-pr list`):
 ```bash
 $ strava-pr show 8
 ```
-![Plot created by show command with another run](https://i.imgur.com/rUZ0iEE.png)
+![Plot created by show command with another run](images/show-8.png)
 
 This command can also output a PNG image with the option `--to-file`.
 
@@ -156,7 +158,7 @@ create a GIF which will show you each run you made and its contribution to your 
 ```bash
 $ strava-pr history history.gif
 ```
-![Animation create by history command](https://i.imgur.com/oEt3CDW.gif)
+![Animation create by history command](images/history.gif)
 
 ## Add run information to Strava
 
@@ -169,11 +171,11 @@ To use this command you will need to create an Imgur client id and add it to the
 make sure the Strava’s access token has write permissions.
 
 ```bash
-$ strava-pr add-description-history
+$ strava-pr strava add-description-history
 ```
 Strava’s run description                             | Plot of that run
 :---------------------------------------------------:|:----------------------------------------:
-![Run description](https://i.imgur.com/5R2s57Y.png)  |  ![Plot](https://i.imgur.com/KLmtDtr.png)
+![Run description](images/strava-description.png)  |  ![Plot](images/strava-add-description.png)
 
 Here you can easily see that this run broke the PR for all distances between *~1400 m* and *~4000 m*.
 
