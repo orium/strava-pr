@@ -68,6 +68,7 @@ case class Run(
   distances: Seq[Int]
 ) {
   require(distances.head == 0, "First distance must be zero")
+  require(times.length == distances.length, "The number of time and distance samples must be the same")
 
   def date: LocalDate = datetime.toLocalDate
 
@@ -94,8 +95,10 @@ case class Run(
   def timeAt(distance: Int): Option[Duration] =
     if (0 <= distance && distance <= stats.distance) Some(timeAtDistance(distance)) else None
 
+  def distance: Int = distances.last
+
   def stats: Run.Stats = Run.Stats(
-    distance = distances.last,
+    distance = distance,
     duration = this.asRunSlice.duration,
     pace = this.asRunSlice.pace
   )
@@ -105,11 +108,11 @@ case class Run(
   def asRunSlice: RunSlice =
     RunSlice(distances.last, 0, Duration(times.last, TimeUnit.SECONDS), this)
 
-  def runSlices(distance: Int): Seq[RunSlice] = {
-    (0 to (stats.distance - distance)).map { startDistance =>
-      val time = timeAt(startDistance + distance).get - timeAt(startDistance).get
+  def runSlices(dist: Int): Seq[RunSlice] = {
+    (0 to (distance - dist)).map { startDistance =>
+      val time = timeAt(startDistance + dist).get - timeAt(startDistance).get
 
-      RunSlice(distance, startDistance, time, this)
+      RunSlice(dist, startDistance, time, this)
     }
   }
 }

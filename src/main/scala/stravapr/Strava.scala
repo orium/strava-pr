@@ -23,18 +23,21 @@ import java.time.format.DateTimeFormatter
 import kiambogo.scrava.ScravaClient
 import kiambogo.scrava.models.{PersonalDetailedActivity, Streams}
 
+import scala.util.control.NonFatal
+
 class Strava(
   client: ScravaClient,
   runCache: RunCache,
   rateLimiter: RateLimiter
 ) {
+  private def fetchRunActivity(id: Int): Option[PersonalDetailedActivity] =
+    Some(rateLimiter(client.retrieveActivity(id)))
+      .collect {
+        case personalActivity: PersonalDetailedActivity => personalActivity
+      }.filter(_.`type` == "Run")
+
   private def fetchRunActivities(ids: Set[Int]): Set[PersonalDetailedActivity] =
-    ids.flatMap { id =>
-      Some(rateLimiter(client.retrieveActivity(id)))
-        .collect {
-          case personalActivity: PersonalDetailedActivity => personalActivity
-        }.filter(_.`type` == "Run")
-    }
+    ids.flatMap(fetchRunActivity)
 
   def fetchRunActivities(): Set[PersonalDetailedActivity] = {
     val runIds = rateLimiter(client.listAthleteActivities(retrieveAll = true)).map(_.id).toSet
@@ -42,15 +45,23 @@ class Strava(
     fetchRunActivities(runIds)
   }
 
-  def activityToRun(activity: PersonalDetailedActivity): Run = {
-    val timeDistance: Seq[Streams] = rateLimiter {
-      client.retrieveActivityStream(activity.id.toString, Some("time,distance"))
-    }
-    val times     = timeDistance(0).data.map(_.asInstanceOf[Int]).toArray
-    val distances = timeDistance(1).data.map(_.asInstanceOf[Float].round).toArray
-    val datetime  = LocalDateTime.parse(activity.start_date, DateTimeFormatter.ISO_DATE_TIME)
+  def activityToRun(activity: PersonalDetailedActivity): Option[Run] = {
+    try {
+      val timeDistance: Seq[Streams] = rateLimiter {
+        client.retrieveActivityStream(activity.id.toString, Some("time,distance"))
+      }
+      timeDistance match {
+        case Seq(timeStream, distanceStream) =>
+          val times = timeStream.data.map(_.asInstanceOf[Int]).toArray
+          val distances = distanceStream.data.map(_.asInstanceOf[Float].round).toArray
+          val datetime = LocalDateTime.parse(activity.start_date, DateTimeFormatter.ISO_DATE_TIME)
 
-    Run(activity.id, datetime, times, distances)
+          Some(Run(activity.id, datetime, times, distances))
+        case _ => None
+      }
+    } catch {
+      case NonFatal(e) => None
+    }
   }
 
   def populateRunCache(cacheFile: File, invalidateCache: Boolean)(reportFetch: Run => Unit): Strava.PopulateCacheResult = {
@@ -66,14 +77,18 @@ class Strava(
         .map(_.id)
         .flatMap { id =>
           runCache.get(id).orElse {
-            val r = fetchRunActivities(Set(id)).map(activity => activityToRun(activity)).headOption
+            val r = fetchRunActivity(id).flatMap(activityToRun)
             r.foreach(reportFetch)
             r
           }
-        }.toSet
+        }
+        // A run with distance 0 is not really a run...  Also this would break some of our assumptions.
+        .filter(_.distance > 0)
+        .toSet
     }
 
     // Populate and save cache.
+    runCache.invalidate()
     runCache.add(runs)
     runCache.save(cacheFile)
 

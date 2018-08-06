@@ -1,5 +1,5 @@
 val ProjectName  = "strava-pr"
-val ScalaVersion = "2.12.5"
+val ScalaVersion = "2.12.6"
 
 lazy val stravaPR = (project in file("."))
   .settings(stravaPRSettings: _*)

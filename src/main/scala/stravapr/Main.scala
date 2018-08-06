@@ -99,10 +99,12 @@ object Main {
 
           allRunActivities.map { activity =>
             runs.get(activity.id) match {
-              case Some(run) => run -> activity
+              case Some(run) => Some(run) -> activity
               case None => // Cache miss, lets fetch it fully.
                 strava.activityToRun(activity) -> activity
             }
+          }.collect {
+            case (Some(run), activity) => run -> activity
           }.toMap
         }
 
@@ -230,7 +232,7 @@ object Main {
     val allPlots = personalRecordsHistory
       .flatMap { case RunHistory.PersonalRecordsAtRun(_, runRecords, previousPersonalRecords, personalRecords) =>
         val prAndRacePlot = PacePerDistancePersonalRecordsPlot.fromMultiplePersonalRecords(
-          Set(previousPersonalRecords, runRecords),
+          Set(previousPersonalRecords, runRecords)
         )
 
         Seq(
@@ -260,7 +262,7 @@ object Main {
     }
 
     val images = (allPlots zip allConfigs)
-      .drop(1) // The first two frames will are the same.
+      .drop(1) // The first two frames will be the same.
       .map { case (p, c) => p.withConfig(c) }
       .map(_.createPNGImage(resolution))
 
