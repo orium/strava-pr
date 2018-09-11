@@ -37,8 +37,8 @@ object Main {
   }
 
   private object RateLimiters {
-    val stravaRateLimiter: RateLimiter = new RateLimiter(_.isInstanceOf[RateLimitException])
-    val imgurRateLimiter: RateLimiter = new RateLimiter(_.isInstanceOf[ImgurUploader.RateLimitingExceeded.type])
+    val stravaRateLimiter: RateLimiter = RateLimiter.byException[RateLimitException]
+    val imgurRateLimiter: RateLimiter = RateLimiter.byException[ImgurUploader.RateLimitingExceeded.type]
   }
 
   private def isSetupDone(): Boolean =

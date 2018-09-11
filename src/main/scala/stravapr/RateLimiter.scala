@@ -19,12 +19,13 @@ package stravapr
 import kiambogo.scrava.models.RateLimitException
 
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
-class RateLimiter(isRateLimitExceeded: Exception => Boolean) {
+class RateLimiter(isRateLimitExceeded: Throwable => Boolean) {
   private def run[T](f: => T, backoff: Duration = 1.minute): T = try {
     f
   } catch {
-    case e: Exception if isRateLimitExceeded(e) =>
+    case NonFatal(e) if isRateLimitExceeded(e) =>
       println(s"Rate limit exceeded.  Sleeping for $backoff...")
 
       Thread.sleep(backoff.toMillis)
@@ -36,4 +37,18 @@ class RateLimiter(isRateLimitExceeded: Exception => Boolean) {
 
   def apply[T](f: => T): T =
     run(f)
+}
+
+object RateLimiter {
+  import scala.reflect.{ClassTag, classTag}
+
+  def byException[T <: Throwable: ClassTag]: RateLimiter =
+    new RateLimiter(exceptionCausedBy[T])
+
+  def exceptionCausedBy[T <: Throwable: ClassTag](exception: Throwable): Boolean = {
+    classTag[T].runtimeClass.isInstance(exception) match {
+      case true => true
+      case false => Option(exception.getCause).exists(exceptionCausedBy[T])
+    }
+  }
 }
